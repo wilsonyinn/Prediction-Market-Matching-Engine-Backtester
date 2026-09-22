@@ -439,3 +439,49 @@ actually read — the measurement methodology is what carries an interview
 conversation, and burying it inside argparse plumbing in one large `run_bench.py`
 would bury the part with the most substance. `run_bench.py` remains the CLI entry
 point the spec names.
+
+**Workload generators use a fixed synthetic mid, not a random walk.** An early
+version let the mid drift by up to one tick per command, which is realistic-looking
+but unsound: since each order's price is an offset from the mid *at the moment it
+was generated*, a later order can end up crossing an earlier one placed near a
+different mid. This was caught by the harness's own setup-phase invariant check
+(`assert not any(isinstance(e, Trade) for e in setup_events)`) firing during manual
+smoke testing — `balanced`'s pre-population step was producing real trades. A fixed
+mid makes "passive orders never cross each other" true by construction: every buy
+prices at or below `mid - 1`, every sell at or above `mid + 1`, for the entire run.
+The cost — price levels get reused rather than wandering — is free, since realistic
+price *paths* were never a goal, only realistic *mixes* of operations.
+
+**Cancel-target modeling in `balanced`/`deep_book`, and its honest cancel-miss
+rate.** The generator can't ask a real engine which ids are still resting (that
+would break the determinism guarantee the whole module is built on), so it keeps
+its own approximate model: a list of ids it believes are still live, built only from
+**passive** submissions (never marketable ones — a FOK/FAK never rests at all, and
+an aggressively-priced GTC marketable usually fills partially or completely on
+arrival, so neither is a trustworthy cancel target), with an entry removed the
+moment the generator cancels it and a random subset removed when a marketable order
+is generated (`_deplete`, capped at 8 removals per marketable, since a marketable's
+aggressive price crosses essentially the whole opposite side regardless of exactly
+when a given resting order was placed).
+
+Even with this model, measured against a real `ArrayBook` engine: `balanced` misses
+(`CancelRejected`) on roughly **19–32%** of its generated cancels depending on
+`depth`; `deep_book` around **24%**; `sparse_book` (whose setup places at most one
+order per price tick, making liveness trivially exact) around **3%**. The first
+version of this model — before excluding marketable ids from the live set entirely
+— missed on over 70%; that fix (marketable submissions are never reliable cancel
+targets) was the single biggest improvement.
+
+The remaining ~20-30% miss rate for `balanced`/`deep_book` is not treated as a bug
+to keep chasing: closing it further would require the generator to actually
+simulate price-time priority matching (which order gets consumed first, at what
+partial quantity) — i.e., reimplementing the matching engine inside the benchmark
+harness, which is precisely the coupling the "never query a real engine" design
+principle exists to avoid. A `CancelRejected(ALREADY_FINISHED)` is also not free
+noise in the measurement: it's a real, valid, O(1) engine operation (a dict lookup
+against `_state`) that real clients issue too (cancel racing a fill), so a workload
+that generates more of them than ideal is still exercising a legitimate code path,
+not corrupting the benchmark. The rate is recorded in every results JSON
+(`cancel_reject_rate` alongside `trades`/`rejects`) rather than hidden, and
+`tests/bench/test_workloads.py` asserts it stays within the measured range rather
+than an aspirational one.

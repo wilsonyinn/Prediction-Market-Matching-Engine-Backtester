@@ -121,6 +121,56 @@ def test_render_shows_scaling_relative_to_minimum_depth() -> None:
     assert "4.0x" in markdown
 
 
+def test_render_scopes_scaling_baseline_per_label() -> None:
+    """A 'baseline' and 'optimized' run of the same cell must not share a
+    scaling baseline with each other -- otherwise 'optimized' rows would scale
+    against 'baseline' numbers instead of their own minimum-depth row."""
+    common_env = {
+        "cpu_brand": "x",
+        "os": "Darwin",
+        "os_release": "1",
+        "python_version": "3.13",
+        "timer": {"overhead_ns_median": 1, "resolution_ns": 1.0},
+    }
+    cells = [
+        {
+            **_ok_latency_cell(impl="array", depth=0, p50=100),
+            "_mode": "latency",
+            "_label": "baseline",
+        },
+        {
+            **_ok_latency_cell(impl="array", depth=1000, p50=200),
+            "_mode": "latency",
+            "_label": "baseline",
+        },
+        {
+            **_ok_latency_cell(impl="array", depth=0, p50=50),
+            "_mode": "latency",
+            "_label": "optimized",
+        },
+        {
+            **_ok_latency_cell(impl="array", depth=1000, p50=75),
+            "_mode": "latency",
+            "_label": "optimized",
+        },
+    ]
+    for c in cells:
+        c["_source_file"] = "f.json"
+        c["_started_at"] = "20260101T000000Z"
+        c["_environment"] = common_env
+
+    markdown = render(cells)
+
+    assert "label" in markdown
+    assert "baseline" in markdown
+    assert "optimized" in markdown
+    # optimized/d1000 (75) scales against optimized/d0 (50) -> 1.5x, not against
+    # baseline/d0 (100).
+    assert "1.5x" in markdown
+    # baseline/d1000 (200) scales against baseline/d0 (100) -> 2.0x.
+    assert "2.0x" in markdown
+
+
 def test_render_reports_non_ok_status_as_footnoted_row() -> None:
     cell = _ok_latency_cell(impl="naive", depth=100_000, p50=0)
     cell["status"] = "excluded"

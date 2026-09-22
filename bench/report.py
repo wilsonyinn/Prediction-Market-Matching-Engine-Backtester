@@ -70,41 +70,49 @@ def _latency_table(cells: list[dict[str, Any]]) -> str:
         return ""
 
     multi_tick = len({_max_tick(c) for c in ok_cells + other_cells}) > 1
+    multi_label = len({c["_label"] for c in ok_cells + other_cells}) > 1
 
-    ok_cells.sort(key=lambda c: (_max_tick(c), c["impl"], _depth(c)))
-    # sorted by (max_tick, impl, depth) ascending, so the first cell seen for each
-    # (max_tick, impl) pair is necessarily its minimum-depth row -- the scaling
-    # baseline. Keyed on max_tick too: sparse_book runs at two tick sizes must not
-    # share a baseline, or the scaling column compares across an unrelated axis.
-    baseline_p50: dict[tuple[int, str], float] = {}
+    ok_cells.sort(key=lambda c: (c["_label"], _max_tick(c), c["impl"], _depth(c)))
+    # sorted by (label, max_tick, impl, depth) ascending, so the first cell seen
+    # for each (label, max_tick, impl) triple is necessarily its minimum-depth
+    # row -- the scaling baseline. Keyed on label and max_tick too: a "baseline"
+    # and an "optimized" run of the same cell, or sparse_book's two tick sizes,
+    # must never share a scaling baseline with each other.
+    baseline_p50: dict[tuple[str, int, str], float] = {}
     for c in ok_cells:
-        baseline_p50.setdefault((_max_tick(c), c["impl"]), c["latency_ns"]["p50"])
+        baseline_p50.setdefault((c["_label"], _max_tick(c), c["impl"]), c["latency_ns"]["p50"])
 
+    label_col = " label |" if multi_label else ""
+    label_sep = ":---|" if multi_label else ""
     tick_col = " tick |" if multi_tick else ""
     tick_sep = "---:|" if multi_tick else ""
     lines = [
-        f"|{tick_col} depth | impl | events | events/s | trades/s | p50 µs | p95 µs | "
-        "p99 µs | max µs | vs min depth |",
-        f"|{tick_sep}---:|:---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        f"|{label_col}{tick_col} depth | impl | events | events/s | trades/s | p50 µs | "
+        "p95 µs | p99 µs | max µs | vs min depth |",
+        f"|{label_sep}{tick_sep}---:|:---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     footnotes: list[str] = []
     for c in ok_cells:
         lat = c["latency_ns"]
         thr = c["throughput"]
-        base = baseline_p50.get((_max_tick(c), c["impl"]))
+        base = baseline_p50.get((c["_label"], _max_tick(c), c["impl"]))
         scale = f"{lat['p50'] / base:.1f}x" if base else "—"
+        label_cell = f" {c['_label']} |" if multi_label else ""
         tick_cell = f" {_max_tick(c)} |" if multi_tick else ""
         lines.append(
-            f"|{tick_cell} {_depth(c):,} | {c['impl']} | {c['measured']['commands']:,} | "
-            f"{_fmt(thr['events_per_sec'], 0)} | {_fmt(thr['trades_per_sec'], 0)} | "
-            f"{lat['p50'] / 1000:.2f} | {lat['p95'] / 1000:.2f} | {lat['p99'] / 1000:.2f} | "
-            f"{lat['max'] / 1000:.2f} | {scale} |"
+            f"|{label_cell}{tick_cell} {_depth(c):,} | {c['impl']} | "
+            f"{c['measured']['commands']:,} | {_fmt(thr['events_per_sec'], 0)} | "
+            f"{_fmt(thr['trades_per_sec'], 0)} | {lat['p50'] / 1000:.2f} | "
+            f"{lat['p95'] / 1000:.2f} | {lat['p99'] / 1000:.2f} | {lat['max'] / 1000:.2f} | "
+            f"{scale} |"
         )
     for i, c in enumerate(other_cells, start=1):
         marker = f"[{i}]"
+        label_cell = f" {c['_label']} |" if multi_label else ""
         tick_cell = f" {_max_tick(c)} |" if multi_tick else ""
         lines.append(
-            f"|{tick_cell} {_depth(c):,} | {c['impl']} | — | — | — | — | — | — | — | {marker} |"
+            f"|{label_cell}{tick_cell} {_depth(c):,} | {c['impl']} | — | — | — | — | — | — "
+            f"| — | {marker} |"
         )
         footnotes.append(
             f"{marker} status=`{c['status']}`: {c.get('error') or 'not measured'}. "
@@ -120,17 +128,21 @@ def _memory_table(cells: list[dict[str, Any]]) -> str:
     mem_cells = [c for c in cells if c["_mode"] == "memory" and c["status"] == "ok"]
     if not mem_cells:
         return ""
-    mem_cells.sort(key=lambda c: (c["impl"], _depth(c)))
+    multi_label = len({c["_label"] for c in mem_cells}) > 1
+    mem_cells.sort(key=lambda c: (c["_label"], c["impl"], _depth(c)))
 
+    label_col = " label |" if multi_label else ""
+    label_sep = ":---|" if multi_label else ""
     lines = [
-        "| depth | impl | book bytes after setup | bytes/resting order | peak bytes | "
-        "current bytes (end) |",
-        "|---:|:---|---:|---:|---:|---:|",
+        f"|{label_col} depth | impl | book bytes after setup | bytes/resting order | "
+        "peak bytes | current bytes (end) |",
+        f"|{label_sep}---:|:---|---:|---:|---:|---:|",
     ]
     for c in mem_cells:
         m = c["memory"]
+        label_cell = f" {c['_label']} |" if multi_label else ""
         lines.append(
-            f"| {_depth(c):,} | {c['impl']} | {m['book_bytes_after_setup']:,} | "
+            f"|{label_cell} {_depth(c):,} | {c['impl']} | {m['book_bytes_after_setup']:,} | "
             f"{m['bytes_per_resting_order']:.1f} | {m['peak_bytes']:,} | "
             f"{m['current_bytes_end']:,} |"
         )

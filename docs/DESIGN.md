@@ -641,3 +641,32 @@ so a runtime-malformed order (e.g. from Phase 3's deserialized market data) is
 rejected with an `OrderRejected` event instead of crashing the engine, and that
 guarantee is worth its measured cost. The number is recorded here as the honest
 price of paying it, not as an invitation to remove it later.
+
+### 3. `ArrayBook`: inline `_arrays_for` at each call site
+
+**Hypothesis**: `_arrays_for` ran ~139k times in the initial `balanced` profile
+(2+ calls per book operation) -- a Python call plus the 2-tuple it constructs and
+immediately unpacks, on a very hot path.
+
+**Change**: `src/engine/array_book.py` -- `add`, `remove`, `front`, `reduce`, and
+`levels` each select `self._bid_*`/`self._ask_*` inline instead of calling the
+shared helper, which is deleted. Confined entirely to `array_book.py`, so this is a
+genuine same-process `array_baseline` A/B, not a before/after across files.
+
+**`array` vs. `array_baseline`, same session** (7 repeats each):
+
+| cell | p50 baseline | p50 array | Δp50 | events/s baseline | events/s array | Δthroughput |
+|---|---:|---:|---:|---:|---:|---:|
+| balanced/d10,000 | 1417ns | 1375ns | -3.0% | 1,471,331 | 1,501,099 | +2.0% |
+| sweep_heavy/d10,000 | 1375ns | 1334ns | -3.0% | 1,506,623 | 1,538,040 | +2.1% |
+| deep_book/d100,000 | 1417ns | 1416ns | -0.1% | 1,350,218 | 1,377,377 | +2.0% |
+
+**Verdict: kept, below the ≥5% bar but consistent and never negative.** Every cell
+improves on both metrics; none clears 5%. Weighed against the actual readability
+cost here specifically (not a hypothetical one): the four-line side-selection
+`if`/`else` is now duplicated across five methods instead of centralized in one
+helper -- a real but small tax, and the resulting code is still obviously correct
+(each duplicate is a two-line dict/list selection, not logic that can drift out of
+sync). Kept on the combination of a small, real, consistent win and a small,
+bounded duplication cost, not because it independently clears the pre-declared
+threshold.

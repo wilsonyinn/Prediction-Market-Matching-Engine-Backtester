@@ -39,11 +39,21 @@ convention = "google"
 
 [tool.ruff.lint.pylint]
 # The validation checklist and the match loop legitimately branch a lot. Raising the
-# limit is preferable to scattering noqa comments over the core algorithm.
+# limits is preferable to scattering noqa comments over the core algorithm.
 max-branches = 15
+max-returns = 12
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["D", "ANN", "PLR2004", "ARG", "S101"]
+# TC (type-checking-block imports) exists to avoid runtime import cost and circular
+# imports in shipped library code; test files are never imported by a consumer, and
+# forcing every fixture-typed parameter's import behind `if TYPE_CHECKING:` there is
+# boilerplate without a payoff.
+"tests/**" = ["D", "ANN", "PLR2004", "ARG", "S101", "TC"]
+# Book implementations satisfy engine/book.py's OrderBook protocol, which is the
+# single documented source of truth for every method's semantics; repeating the
+# same docstring on each implementation would drift rather than inform.
+"src/engine/naive_book.py" = ["D102", "D105", "D107"]
+"src/engine/array_book.py" = ["D102", "D105", "D107"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -55,6 +65,7 @@ enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code"]
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 minversion = "8.0"

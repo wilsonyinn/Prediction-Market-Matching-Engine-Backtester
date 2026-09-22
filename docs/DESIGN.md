@@ -1,15 +1,340 @@
 # Design Decisions
 
 Every non-obvious decision in this project is recorded here: the decision, the
-alternatives considered, and the reason. Entries are added as each phase is built, not
-retrofitted at the end.
+alternatives considered, and the reason. Entries are added as each phase is built,
+not retrofitted at the end.
 
 ## Phase 0 — Setup
 
-*(entries added as Phase 0 lands)*
+**Build backend: hatchling.** PEP 621 metadata only, zero config needed for a `src/`
+layout. Rejected setuptools (needs explicit `package-dir`/`packages.find` for a src
+layout) and poetry (non-standard `[tool.poetry]` metadata a reviewer has to decode).
+
+**Package layout follows the spec literally: `src/engine/`.** The spec's repository
+tree makes `engine`, `data`, `backtest` three top-level import names. `data` as a
+global import name is vague, and a `src/predmarket/` namespace would avoid that — but
+Phase 1 only touches `engine`, which is a fine name on its own, so the namespace
+question is deferred to Phase 3 rather than decided speculatively now.
+
+**mypy `strict = true` over `src` and `tests`, but not `bench/`.** `bench/` doesn't
+exist until Phase 2; listing a missing path makes mypy error immediately. It's added
+to `files` when Phase 2 creates it.
+
+**No `--cov` in pytest's default `addopts`.** Coverage tracing roughly doubles local
+run time and interferes with `pdb`. Coverage is a `make cov` / CI-only concern; the
+90% floor is still enforced locally too, via `[tool.coverage.report] fail_under = 90`
+rather than a CI-only flag.
+
+**CI does not cache `.hypothesis/`.** The example database is machine- and
+version-keyed; a stale cache would turn a genuine finding into a confusing flake.
+Determinism across runs comes from the registered `ci` Hypothesis profile instead
+(see below), not from a persisted example cache.
 
 ## Phase 1 — Engine
 
-*(entries added as Phase 1 lands: matching rules, clock/expiry semantics, rejection
-rules, the `OrderBook` protocol, and the complexity table for each book
-implementation.)*
+### Two spec ambiguities, resolved explicitly
+
+**1. `seq` is assigned per emitted *event*, not per input command.** The spec says
+both "every input event gets a monotonically increasing sequence number" and "every
+event carries `seq`". A per-command `seq` would not uniquely identify an event and
+would make the differential tests' "streams must be identical" rest entirely on list
+position rather than on `seq` itself. Per-event `seq` (global, starts at 1, never
+skips) makes list order redundant with — and therefore checked by — the `seq` field,
+and gives every trade a unique global ordinal. Command boundaries are still
+recoverable: every command's non-expiry events begin with exactly one of
+`OrderAccepted` / `OrderRejected` / `OrderCanceled` / `CancelRejected`.
+
+**2. The clock advances (and the expiry sweep runs) for any command with
+`timestamp >= clock`, even if that command is then rejected for an unrelated
+reason.** Only a timestamp-regression rejection suppresses the advance. Time is
+environment, not order state — the spec's "a rejection causes no state change" is
+about the *book*, not the clock. The alternative (advance only on full success)
+makes the clock's behavior depend on unrelated validation outcomes and lets a run of
+malformed submits indefinitely delay real expiries. Consequence: every returned
+event list has the shape `[OrderExpired…] ++ [command's own events…]`.
+
+### `Order` vs `RestingOrder`
+
+Inbound `Order` is a frozen, `slots=True` dataclass that performs **no validation of
+its own** — a malformed order must still construct, so the engine can reject it with
+an `OrderRejected` *event* rather than an exception.
+
+`RestingOrder` is a **separate**, mutable (`slots=True`, not frozen) dataclass, used
+only for book-resident orders. Reasons it's distinct from `Order`, not a mutable
+`Order`:
+
+- A frozen dataclass can't shrink as it fills; mutating a frozen dataclass's field
+  goes through `object.__setattr__`, which costs a function call — not paid on every
+  partial fill if `RestingOrder` just isn't frozen.
+- It carries `entry_seq`, an engine-assigned arrival ordinal that both `NaiveBook`
+  and `ArrayBook` use identically for FIFO and expiry tie-breaks. That's engine
+  state, not client input, and doesn't belong on `Order`.
+- Keeping `Order` immutable means a caller holding a reference can never observe or
+  corrupt live engine state, and the inbound stream stays safely replayable.
+
+### Event design
+
+Every terminal event carries the quantity it accounts for
+(`OrderFilled.filled_quantity`, `OrderCanceled.canceled_quantity`,
+`OrderExpired.expired_quantity`, `OrderKilled.killed_quantity`). This is load-bearing:
+conservation (`filled + remaining + canceled + expired + killed == original`) is
+verified by folding the **public event stream**, not by reading engine internals —
+see `tests/property/ledger.py`. That checks the engine against its own published
+contract (what a downstream consumer, e.g. the Phase 3 backtester, would actually
+rely on), not against itself.
+
+`OrderKilled.killed_quantity` — the spec calls this field `killed_qty`, renamed here
+for consistency with the other three terminal events' `*_quantity` naming.
+
+**Exact emission rule**, pinned because the differential tests compare event streams
+for exact equality:
+
+```
+for each maker consumed, in match order:
+    emit Trade(...)
+    if maker.remaining == 0: emit OrderFilled(maker_id, maker.original_quantity)
+after the loop:
+    if taker_remaining == 0:  emit OrderFilled(taker_id, quantity)
+    elif GTC/GTD:             emit OrderRested(taker_id, taker_remaining)
+    elif FAK:                 emit OrderKilled(taker_id, taker_remaining)
+    # FOK cannot reach here with remaining > 0
+```
+
+The maker gets its own `OrderFilled`, separate from the taker's: `Trade` is the
+two-sided economic event, `OrderFilled` is the one-sided lifecycle event meaning
+"this order_id is no longer live." A partially-consumed maker emits nothing beyond
+its `Trade`. `OrderAccepted` is emitted even for a FOK/FAK that ends up killed —
+"accepted" means "passed validation," kill is a separate outcome. No event is ever
+emitted with a zero quantity (a fully-filled FAK gets `OrderFilled`, not
+`OrderKilled(0)`).
+
+### Validation order
+
+Checked as a fixed ordered checklist; the first failure wins and exactly one
+`OrderRejected` is emitted. Structure before identity — a malformed *and* duplicate
+order is reported as malformed:
+
+1. `TIMESTAMP_REGRESSION` (checked before anything else; it's the only failure that
+   suppresses the clock advance)
+2. `UNKNOWN_SIDE` / `UNKNOWN_ORDER_TYPE` (`isinstance` checks — unreachable through a
+   type-checked caller, but the engine still must reject genuinely malformed runtime
+   input rather than crash, e.g. from later deserialized data)
+3. `PRICE_NOT_INTEGER` (note `bool` is an `int` subclass; `True`/`False` are rejected
+   as prices)
+4. `PRICE_OUT_OF_RANGE`
+5. `QUANTITY_NOT_POSITIVE` (same bool caveat)
+6. `EXPIRY_ON_NON_GTD` / `MISSING_EXPIRY` / `EXPIRY_IN_PAST` (compared against the
+   **new** clock, so a GTD is never accepted that the very next sweep would kill)
+7. `DUPLICATE_ORDER_ID` (checked against a permanent registry — see below)
+
+### Order-state tracking and cancel semantics
+
+`remaining` lives only on `RestingOrder`, inside the book — one source of truth, no
+mirror in the engine. A taker's in-progress remaining during a match is a **local
+int** in `submit()`, so FOK/FAK orders and any order that fully fills on arrival
+never allocate a `RestingOrder` at all.
+
+A separate engine-side `_state: dict[str, OrderState]` maps every order_id that ever
+passed validation to its lifecycle state, **permanently** — including after it
+reaches a terminal state. This is deliberately not a quantity ledger, just a state
+tag. It does two jobs:
+
+- **Duplicate-id detection.** An id is burned the moment it's accepted, even after
+  the order later fills, cancels, or expires. A *rejected* order's id is **not**
+  burned — rejection is no state change, so `test_rejected_order_id_remains_available`
+  can immediately resubmit under the same id.
+- **The `CancelRejected` discriminator.** Absent from `_state` → `UNKNOWN_ORDER_ID`;
+  present but not `OPEN` → `ALREADY_FINISHED`. A book-only design (no separate
+  registry) cannot distinguish "this id never existed" from "this id already
+  finished," which the spec's "cancel an unknown or already-finished order" wording
+  requires to be distinguishable.
+
+Cancel checks the sweep before the id lookup (since the clock advances first): if
+the sweep at `t` expires the very order being canceled, the result is
+`OrderExpired(oid)` followed by `CancelRejected(oid, ALREADY_FINISHED)` in the same
+returned list — `test_cancel_*` in `tests/unit` doesn't cover this exact interleaving
+directly, but `_advance_and_sweep` running before the state lookup guarantees it.
+
+### FOK: dry-run pass, not execute-then-rollback
+
+`_crossing_quantity` walks `book.levels()` aggregates, breaking the moment a level
+stops crossing or enough quantity has been found. If short, `OrderKilled` is emitted
+having touched nothing; otherwise the ordinary match loop runs and is now guaranteed
+to complete.
+
+This stays bounded to the levels the execution pass would touch anyway, and reads
+**only** level aggregates — never intra-level FIFO order — so it can never depend on
+how a specific book implementation stores orders within a level, and both
+implementations are contractually required (per the `OrderBook` protocol) to report
+the same aggregates. "Zero trades, book unchanged" is therefore true by
+construction, not by proof.
+
+Execute-then-rollback was rejected: undoing a fill means reinserting a maker at its
+exact former FIFO position, which an `OrderedDict` can't do without an O(k) level
+rebuild, plus unwinding the best-price cache, `trade_id`, `seq`, and `_state` — five
+things instead of zero, and a failure mode (silent book corruption) that only shows
+up probabilistically in a differential test rather than being ruled out by
+construction.
+
+### Expiry: an engine-side min-heap with lazy deletion, not a book scan
+
+A min-heap of `(expires_at, entry_seq, order_id)` lives in `MatchingEngine`, not in
+either book. It has to live in the engine because the tie-break for
+same-millisecond expiries must be identical across implementations — a "scan the
+book for expired orders" design would let `NaiveBook` and `ArrayBook` emit the same
+*set* of `OrderExpired` events in a different *order* (since each iterates its
+internal storage differently), and the differential test would fail for a reason
+that looks like a matching bug rather than an ordering artifact. Keying the heap on
+`entry_seq` — an engine-assigned ordinal, not anything either book controls — is
+what makes the ordering implementation-independent. Same-millisecond expiries fire
+in arrival order (`entry_seq` ascending): a first-class documented rule, not an
+implementation detail.
+
+Pushed only when a GTD order actually rests (GTC never pushes; FOK/FAK never rest so
+never push). Fills and cancels do **not** touch the heap — lazy deletion instead:
+staleness is detected at pop time via `book.get(oid) is None or
+order.entry_seq != entry_seq`. This keeps the common case (nothing due) at a single
+comparison, which is what preserves `ArrayBook`'s O(1)-ish story for Phase 2 — a
+naive per-event scan of all resting GTD orders would be O(n) and defeat the whole
+point of a bounded-price array.
+
+Lazy deletion alone would let heap memory grow without bound under a
+rest-then-cancel-repeatedly workload, so `_stale_expiries` is tracked and the heap is
+rebuilt (`heapify` over the still-live entries) once stale entries exceed half of it
+— amortized O(1) per deletion, heap memory bounded by live GTD orders.
+
+`advance_time(t)` with `t < clock` raises `ValueError` rather than emitting some new
+event type: the spec defines no event for a rejected time advance, and a regressing
+`advance_time` call is a harness bug (nothing produces it from real input, since
+every `submit`/`cancel` already advances the clock monotonically), not a market
+event worth representing in the event vocabulary.
+
+### `ArrayBook`: two arrays per side, not one shared by price
+
+Levels are indexed directly by price tick, in **two** lists of length
+`max_tick + 1` — one for bids, one for asks — not one array shared between sides.
+
+Sharing one array would still be *correct*: the matching engine's no-cross invariant
+(enforced by `_match` always consuming resting liquidity until it stops crossing)
+guarantees a bid and an ask can never simultaneously rest at the same price, since
+either arriving order would trade against the other instead of resting. So a single
+`self._levels[price]` indexed by price alone, with `front`/`levels`/etc. ignoring
+`side`, would never actually mix bid and ask orders in practice.
+
+That correctness argument is exactly the kind of cleverness this project's stated
+values ("prefer clarity over cleverness") argue against: it makes the storage
+layer's safety depend on a non-local invariant proved elsewhere (in the matching
+loop), rather than by construction. Two arrays make `front(side, price)` and
+`levels(side)` obviously correct without that proof, at a trivial memory cost (at
+most ~4,000 pre-allocated `OrderedDict`s even at tick size 0.001).
+
+Both arrays are length `max_tick + 1` so that indices `0` and `max_tick` are always
+in-bounds and permanently empty, acting as sentinels for "no bid" / "no ask" — the
+match loop's inner scan and `front()`'s bounds check need no separate `None`
+handling for those two positions. All level `OrderedDict`s are pre-allocated at
+construction and never destroyed, so a level emptying or filling never allocates or
+frees a level object.
+
+**FIFO via `OrderedDict`, not an intrusive doubly-linked list — for now.** A DLL
+would remove `front()`'s one-iterator-per-call allocation, but costs ~40 lines of
+pointer surgery and still needs the separate `dict[order_id, RestingOrder]` index
+(it removes an iterator, not a lookup). Shipping `OrderedDict` in Phase 1 and
+holding the DLL as a documented Phase 2 optimization means that swap can be
+profiled first, made behind this same unchanged protocol, and reported with a
+measured before/after number — which is what Phase 2 actually asks for. Beyond the
+two structural choices above (pre-allocated levels, `OrderedDict` FIFO), `ArrayBook`
+deliberately stays close to the obvious implementation — no extra caching or
+micro-tuning — so Phase 2 has real profiling wins left to find.
+
+### Testing
+
+**The whole suite is parametrized over both book implementations** via a
+`book_factory` fixture in `tests/conftest.py` (ids `naive` / `array`), plus a
+convenience `engine` fixture for plain unit tests.
+
+**Hypothesis tests build the engine inside the test body from `book_factory`, never
+from the `engine` fixture.** A function-scoped pytest fixture is instantiated once
+per test *function*, not once per Hypothesis *example* — using `engine` directly
+would leak state across hundreds of examples and produce failures that don't
+reproduce when Hypothesis replays its minimized case. (Hypothesis's own health check
+flags any function-scoped fixture used under `@given` as a blanket warning, even
+though calling `book_factory()` fresh per example is exactly the safe pattern it
+can't distinguish from the unsafe one — this is suppressed globally via
+`HealthCheck.function_scoped_fixture` in both registered profiles.)
+
+**Command lists, not a `RuleBasedStateMachine`.** Every property here is a *replay*
+property: the same command list needs to be fed to two engines side by side
+(differential), run twice into fresh engines (determinism), and printed verbatim as
+a Hypothesis failure repro. A state machine interleaves generation with execution
+and leaves no such list to hand to a second engine. Built-in `st.lists` shrinking
+(delete elements, shrink each) already gives the minimization behavior wanted,
+without a custom `@st.composite` loop.
+
+**Strategy design** (in `tests/property/strategies.py`) is what makes the property
+tests actually exercise matching rather than degenerate into testing `add`:
+
+- Prices are drawn mostly from a narrow band (`45..55` out of `1..99`), with a
+  low-weight full-range tier for the boundaries. Uniform random prices almost never
+  cross.
+- Timestamps are non-negative deltas, prefix-summed into absolutes, biased toward 0.
+  This guarantees commands are *accepted* (so matching runs) and produces many
+  same-timestamp events. Absolute random timestamps would make most commands
+  `TIMESTAMP_REGRESSION` rejections — that path has its own dedicated unit tests
+  instead.
+- Order types are weighted toward FOK/FAK above their uniform 25% share (GTC 50% /
+  GTD 20% / FAK 15% / FOK 15%), since that's where bug density is highest.
+- `order_id` is assigned by the runner from the command's list index, not drawn —
+  drawing ids would burn search budget on duplicate-id rejections, which has its own
+  dedicated unit test with a tiny id pool instead.
+- `CancelCmd.target` is a large int resolved modulo the submits issued so far, so
+  most cancels hit a real order and shrinking toward 0 targets the earliest
+  (most-likely-still-resting) one.
+
+**Conservation is checked from the event stream alone** (`tests/property/ledger.py`)
+— never from engine internals, and "original quantity" per order is itself *derived*
+from the stream (the first terminal-or-resting event for an id fixes it as
+fills-so-far-via-`Trade`-sums plus that event's own quantity), not supplied by the
+test's own knowledge of what it generated. `OrderFilled.filled_quantity` is
+additionally cross-checked against the independently-accumulated `Trade` total,
+rather than trusted as the source of truth for what "filled" means.
+
+**Two invariants from the original property-test sketch aren't literally
+implementable against the public API** and are adapted: `snapshot()` returns only
+aggregated `BookLevel`s (price, total quantity, order count) — matching the spec's
+documented `engine.snapshot()` signature exactly — with no per-order-id detail to
+check "this id is/isn't in the book" against. The checkable, equivalent-in-spirit
+versions used instead (see `tests/property/test_properties.py`): a FOK/FAK order
+must never produce an `OrderRested` event (directly witnesses "never rests"), and an
+order that already reached a terminal state must never appear in a later `Trade`
+(directly witnesses "no zombie trading" — the underlying concern behind "no id after
+a terminal event").
+
+**The differential test drives both engines in lockstep**, one command at a time,
+rather than running each engine through the whole list separately and comparing at
+the end — so a divergence is caught at the exact command that caused it, both in the
+event stream and in `snapshot()` / `best_bid()` / `best_ask()`. Its example count is
+derived from the active Hypothesis profile (`active_profile.max_examples * 2`)
+rather than hard-coded, so a fixed `max_examples=2000` doesn't silently override the
+fast `dev` profile and slow down every local run — CI's `ci` profile still pushes it
+into the thousands of examples the spec asks for.
+
+## Complexity table
+
+All are for a book with `max_tick` price ticks and `n` currently resting orders.
+
+| Operation | `NaiveBook` | `ArrayBook` |
+|---|---|---|
+| Add | O(1) (append) | O(1) |
+| Cancel by id | O(n) (linear scan both sides) | O(1) (dict pop + `OrderedDict` delete) |
+| Best price | O(n) (scan) | O(1) (cached, amortized — see below) |
+| Front of level | O(n) (scan + min by `entry_seq`) | O(1) |
+| Match (one taker) | O(n) per level swept | O(k) where k = orders actually consumed, plus O(distance to next non-empty level) amortized per level exhausted |
+| `levels()` full snapshot | O(n log n) (build + sort aggregates) | O(`max_tick`) worst case (bounded scan across all price slots) |
+
+`ArrayBook`'s best-price lookup is O(1) *amortized*: an individual cancel or fill
+that happens to empty the current best level triggers a rescan bounded by the
+distance to the next non-empty level, not by `n` or `max_tick` in the typical case
+of a reasonably liquid book — but the rescan bound is `max_tick` in the worst case
+(a single order resting far from any other liquidity). This divergence from
+`NaiveBook`'s honest O(n) is exactly what Phase 2's benchmarks are meant to measure
+and report with actual numbers, not asserted here.

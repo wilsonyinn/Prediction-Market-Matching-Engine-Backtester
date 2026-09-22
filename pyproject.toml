@@ -11,12 +11,17 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
+tree = ["sortedcontainers>=2.4"]
+bench = ["matplotlib>=3.8"]
 dev = [
   "pytest>=8.0",
   "pytest-cov>=5.0",
   "hypothesis>=6.100",
   "ruff>=0.6",
   "mypy>=1.11",
+  "sortedcontainers>=2.4",
+  "sortedcontainers-stubs>=2.4",
+  "matplotlib>=3.8",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -25,7 +30,7 @@ packages = ["src/engine"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "tests"]
+src = ["src", "tests", "bench"]
 
 [tool.ruff.lint]
 select = [
@@ -54,11 +59,27 @@ max-returns = 12
 # same docstring on each implementation would drift rather than inform.
 "src/engine/naive_book.py" = ["D102", "D105", "D107"]
 "src/engine/array_book.py" = ["D102", "D105", "D107"]
+"src/engine/array_book_baseline.py" = ["D102", "D105", "D107"]
+"src/engine/tree_book.py" = ["D102", "D105", "D107"]
+# Workload generators and the CLI take many keyword-only configuration parameters by
+# design; collapsing them into a config object would move the same fields elsewhere
+# and make call sites less readable.
+"bench/workloads.py" = ["PLR0913"]
+"bench/run_bench.py" = ["PLR0913"]
 
 [tool.mypy]
-python_version = "3.11"
+# Not 3.11 (our declared minimum, enforced by CI's 3.11/3.12/3.13 test matrix at
+# runtime): numpy's stubs (a transitive dependency of the bench/matplotlib extra,
+# pulled in via hypothesis's optional numpy integration) use Python-3.12-only `type`
+# statement syntax, which mypy's parser refuses under a lower configured version --
+# even with follow_imports=skip on the offending modules, since skip mode still
+# parses the target file. python_version only governs mypy's assumed stdlib/typing
+# surface, not what our own code can run on; we never use 3.12-only syntax
+# ourselves (every module starts with `from __future__ import annotations`), so
+# this does not weaken the 3.11 compatibility CI actually checks.
+python_version = "3.12"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "bench"]
 warn_unreachable = true
 enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code"]
 
@@ -66,6 +87,7 @@ enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code"]
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+
 
 [tool.pytest.ini_options]
 minversion = "8.0"

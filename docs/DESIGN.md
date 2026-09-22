@@ -320,16 +320,17 @@ into the thousands of examples the spec asks for.
 
 ## Complexity table
 
-All are for a book with `max_tick` price ticks and `n` currently resting orders.
+All are for a book with `max_tick` price ticks, `n` currently resting orders, and (for
+`TreeBook`) `m` currently *occupied* price levels (`m <= n`, and `m <= max_tick - 1`).
 
-| Operation | `NaiveBook` | `ArrayBook` |
-|---|---|---|
-| Add | O(1) (append) | O(1) |
-| Cancel by id | O(n) (linear scan both sides) | O(1) (dict pop + `OrderedDict` delete) |
-| Best price | O(n) (scan) | O(1) (cached, amortized — see below) |
-| Front of level | O(n) (scan + min by `entry_seq`) | O(1) |
-| Match (one taker) | O(n) per level swept | O(k) where k = orders actually consumed, plus O(distance to next non-empty level) amortized per level exhausted |
-| `levels()` full snapshot | O(n log n) (build + sort aggregates) | O(`max_tick`) worst case (bounded scan across all price slots) |
+| Operation | `NaiveBook` | `ArrayBook` | `TreeBook` |
+|---|---|---|---|
+| Add | O(1) (append) | O(1) | O(log m) (level lookup/insert in the `SortedDict`) |
+| Cancel by id | O(n) (linear scan both sides) | O(1) (dict pop + `OrderedDict` delete) | O(log m) (delete, plus level removal if now empty) |
+| Best price | O(n) (scan) | O(1) (cached, amortized — see below) | O(1) (`SortedDict.peekitem`) |
+| Front of level | O(n) (scan + min by `entry_seq`) | O(1) | O(1) |
+| Match (one taker) | O(n) per level swept | O(k) plus O(distance to next non-empty level) amortized per level exhausted | O(k) plus O(log m) per level exhausted |
+| `levels()` full snapshot | O(n log n) (build + sort aggregates) | O(`max_tick`) worst case (bounded scan across all price slots) | O(m) levels, but O(n) total for the aggregate sums — see below |
 
 `ArrayBook`'s best-price lookup is O(1) *amortized*: an individual cancel or fill
 that happens to empty the current best level triggers a rescan bounded by the
@@ -338,3 +339,103 @@ of a reasonably liquid book — but the rescan bound is `max_tick` in the worst 
 (a single order resting far from any other liquidity). This divergence from
 `NaiveBook`'s honest O(n) is exactly what Phase 2's benchmarks are meant to measure
 and report with actual numbers, not asserted here.
+
+`TreeBook`'s best-price lookup is O(1) unconditionally — `SortedDict.peekitem` reads
+the first/last key directly — because empty levels are deleted rather than merely
+tracked as zero, so there is never a rescan to perform. That is the specific property
+Phase 2's sparse-book benchmark is built to make visible against `ArrayBook`'s
+worst-case `max_tick` bound.
+
+`TreeBook.levels()` recomputes each level's total quantity by summing `remaining`
+over every order at that level, on every call — unlike `ArrayBook`'s O(1) cached
+per-level total. This is a deliberate simplicity choice (see the Phase 2 entry
+below), not an oversight: it makes a full snapshot O(n) rather than O(m), same as
+`NaiveBook`, even though per-order operations are O(log m).
+
+## Phase 2 — Benchmark and Optimize
+
+A profiling pass on the real engine, done before writing any benchmark code, found
+the headline result for this phase: **at the depths tested, `ArrayBook` is not the
+bottleneck.** Book methods (`add`/`remove`/`front`/`best`) are a minority of profiled
+time; engine-side per-command fixed costs — validation, event construction, `seq`
+bookkeeping — dominate. That reframes the optimization work below: several
+candidates are measured, found real, and *not* adopted, because they'd trade away
+either correctness guarantees or code clarity for a return under the noise floor.
+
+**`TreeBook`: `SortedDict[int, OrderedDict[str, RestingOrder]]` per side, optional via
+the `tree` extra.** This is "the general-exchange approach" the spec names —
+empty levels are deleted rather than tracked as zero-quantity, so `best()` never
+needs `ArrayBook`'s bounded rescan; it's an O(1) key read on a data structure that
+only ever contains occupied levels. `sortedcontainers` is declared only in the `tree`
+and `dev` extras, never in `dependencies` — the engine core (`dependencies = []`)
+stays zero-dependency, and `tree_book.py` is never imported from `engine/__init__.py`.
+
+Rejected alternative for best-price tracking: a `heapq` of occupied prices. A heap
+gives O(log m) best-price cheaply, but `levels()` — and therefore `snapshot()` and
+the FOK dry-run's `_crossing_quantity` — needs *ordered iteration over every occupied
+level*, which a heap can't provide without repeatedly popping and rebuilding it. A
+sorted map gives both for the same asymptotic cost.
+
+`TreeBook.levels()` recomputes each level's total quantity by summing `remaining`
+over every resting order at that price, on every call, rather than maintaining a
+cached per-level total the way `ArrayBook` does. A real "general exchange" B-tree
+implementation would typically maintain that cache for O(1) top-of-book depth
+queries; not doing so here is a deliberate simplicity choice, consistent with this
+project's stated preference for obviously-correct over cleverly-optimized, and it
+keeps `TreeBook` a genuinely different reference point from `ArrayBook` rather than a
+second copy of the same caching strategy. Noted as a real complexity cost in the
+table above, not hidden.
+
+**`sortedcontainers-stubs` needed for mypy strict** — `sortedcontainers` ships no
+`py.typed` marker and no bundled stubs (verified: mypy strict fails with
+`import-untyped` without it), so `sortedcontainers-stubs` is a `dev`-extra
+dependency purely for the type checker.
+
+**mypy's `python_version` moved from 3.11 to 3.12.** `matplotlib` (the `bench`
+extra) pulls in `numpy` transitively, and `hypothesis`'s optional numpy-integration
+code (`hypothesis.internal.entropy`, imported — guarded by a runtime
+`sys.modules` check — regardless of whether that guard would actually pass) makes
+mypy follow an import chain into `numpy`'s own stub file, which uses the Python
+3.12 `type` statement. mypy's `follow_imports = "skip"` was tried first, on both
+`numpy.*` and the specific hypothesis internal modules that reach it — it did not
+help, because "skip" mode still *parses* the target file to look for type comments,
+so a genuine syntax-level incompatibility still aborts the whole run. `python_version`
+in mypy config only governs which stdlib/typing surface mypy assumes when *checking
+our code* against dependency stubs; it is not what enforces our actual 3.11
+compatibility (CI's 3.11/3.12/3.13 test matrix does that, at runtime). Every module
+here starts with `from __future__ import annotations` and none use any Python
+3.12-only syntax, so raising this setting costs nothing real and unblocks the
+dependency chain rather than playing whack-a-mole with every current and future
+numpy-touching import inside a third-party package.
+
+**`array_book_baseline.py`: a frozen, never-edited copy of Phase 1's `ArrayBook`**,
+kept permanently in `BOOK_FACTORIES` and therefore under the conformance and
+differential suites forever. This is what makes an in-process, interleaved (ABAB)
+before/after benchmark possible: both the pre- and post-optimization implementation
+exist simultaneously, measured under identical machine load in one session, rather
+than comparing numbers from two separate sessions where machine conditions may
+differ. Rejected: comparing across two git commits in two separate benchmark runs —
+works, and is the *fallback* documented in `bench/`'s design, but loses the
+same-session guarantee and doubles the chance that ambient machine noise (not the
+code change) explains an observed delta.
+
+**`tests/differential/test_differential.py` generalized to compare every registered
+implementation against `NaiveBook`**, rather than hard-coding the naive/array pair.
+The set of implementations under comparison is read from `BOOK_FACTORIES` at import
+time, so `tree` is included automatically when the `sortedcontainers` extra is
+installed and simply omitted otherwise (no `pytest.importorskip` marker needed — an
+implementation that was never registered is an implementation that's never generated
+as a parameter, which is a cleaner mechanism than skipping a generated test case).
+A deliberately-broken `TreeBook.best()` (inverted index, returning the worst price
+instead of the best) was caught immediately by this test with a 2-command shrunk
+repro, confirming the generalized comparison actually exercises `TreeBook` and not
+just the two implementations it replaced.
+
+**`bench/` split into more files than the spec's `workloads.py` + `run_bench.py`.**
+`harness.py` (the measured loop, warmup, GC handling, percentile math, environment
+capture), `impls.py` (the implementation registry), and `report.py` (JSON → markdown)
+are separated out because they are the parts of this phase a reviewer should
+actually read — the measurement methodology is what carries an interview
+conversation, and burying it inside argparse plumbing in one large `run_bench.py`
+would bury the part with the most substance. `run_bench.py` remains the CLI entry
+point the spec names.

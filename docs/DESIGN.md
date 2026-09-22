@@ -485,3 +485,51 @@ not corrupting the benchmark. The rate is recorded in every results JSON
 (`cancel_reject_rate` alongside `trades`/`rejects`) rather than hidden, and
 `tests/bench/test_workloads.py` asserts it stays within the measured range rather
 than an aspirational one.
+
+**Two gaps found while running the first real benchmark matrix, both fixed before
+any numbers were committed:**
+
+1. `cell_key` omitted `max_tick`. Two runs at the same workload/impl/depth but
+   different tick sizes (exactly the `sparse_book` array-vs-tree comparison this
+   phase needs) would silently collide in `report.py`'s `(cell_key, mode, label)`
+   dedup, and the later run would overwrite the earlier one's row with no error.
+   Fixed by including `max_tick` in the key, and `report.py`'s latency table now
+   shows a `tick` column (only when more than one tick size is present in the
+   input, so single-tick-size tables stay uncluttered) and scopes the "vs min
+   depth" scaling baseline per `(max_tick, impl)` rather than per `impl` alone.
+2. A cell excluded from the default matrix (`_SLOW_CELLS`) was simply omitted from
+   `_build_matrix`'s output, so it never appeared in the written results JSON at
+   all — contradicting the documented intent ("excluded, not silently skipped").
+   `_build_matrix` now returns every conceptual cell with an `excluded` flag;
+   `_run_matrix` turns an excluded cell into a placeholder `CellResult` with
+   `status="excluded"`, an `estimated_seconds` figure, and its `repro_command`, so
+   it renders in `report.py` as a labeled row rather than an unexplained gap.
+
+**First baseline matrix, measured** (`results/bench-latency-baseline-*.json`,
+`results/bench-memory-baseline-*.json`; full tables in `results/RESULTS.md`):
+
+- `deep_book` gives the cleanest O(n)-vs-O(1) story, exactly matching the
+  complexity table: `ArrayBook`/`TreeBook` stay flat (≈1.0x p50 from depth 1,000 to
+  100,000) while `NaiveBook` climbs to 5.4x by depth 10,000 (and is excluded above
+  that by default — see `_SLOW_CELLS` — because its setup alone takes tens of
+  seconds at depth 100,000).
+- `balanced` shows the same divergence but later (NaiveBook only degrades sharply
+  at depth 10,000, not 1,000): its default fractions drain a `depth=0` book to a
+  thin steady state (documented above), so a pre-populated `depth` pool matters
+  less to `balanced`'s *measured-phase* cost than it does to `deep_book`, whose
+  cancels specifically target that pool.
+- `sparse_book` at depths 20–200 (tick sizes 0.01 and 0.001) did **not** show
+  `ArrayBook`'s worst-case tick-walking cost separating it from `TreeBook` — both
+  stayed within measurement noise of each other (~1.5M events/s), both clearly
+  ahead of `NaiveBook`. This is reported as a genuine, honest negative result
+  rather than forced into a story: at these depths the gap between the best price
+  and the next occupied level apparently isn't large enough to make `ArrayBook`'s
+  bounded rescan cost measurably more than `TreeBook`'s `SortedDict` lookup. A
+  sparser and/or deeper configuration would be needed to separate them, and is
+  left as a documented gap rather than tuned after the fact to produce a nicer
+  chart.
+- Memory: `ArrayBook`/`ArrayBookBaseline`/`TreeBook` all cost roughly 260–290
+  bytes/resting order versus `NaiveBook`'s ~170–172 (no id-index or per-level
+  wrapper). `ArrayBook`'s pre-allocated fixed array cost is small at `max_tick=100`
+  (a few hundred bytes at `depth=0`) — real at a finer tick size, but not
+  dramatic at this scale.

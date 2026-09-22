@@ -110,27 +110,63 @@ def _resolve_names(requested: list[str] | None, registry: Mapping[str, object]) 
 
 def _build_matrix(
     args: argparse.Namespace,
-) -> list[tuple[str, str, int, int]]:
-    """Returns a list of (workload, impl, depth, n_events) cells to run."""
+) -> list[tuple[str, str, int, int, bool]]:
+    """Returns (workload, impl, depth, n_events, excluded) for every matrix cell.
+
+    Slow cells are included with ``excluded=True`` rather than omitted: a cell
+    dropped from the *runnable* matrix is not the same as a cell that should
+    silently vanish from the results. ``_run_matrix`` turns an excluded cell into a
+    placeholder ``CellResult`` with ``status="excluded"`` so it still shows up in
+    the report as a labeled row rather than an unexplained gap.
+    """
     workload_names = _resolve_names(args.workload, WORKLOADS)
     impl_names = _resolve_names(args.impl, IMPLS)
 
-    matrix: list[tuple[str, str, int, int]] = []
+    matrix: list[tuple[str, str, int, int, bool]] = []
     for workload_name in workload_names:
         depths = args.depth or _DEFAULT_DEPTHS.get(workload_name, [0])
         for depth in depths:
             n_events = args.events if args.events is not None else _events_for_depth(depth)
             for impl_name in impl_names:
-                if not args.include_slow and (workload_name, impl_name, depth) in _SLOW_CELLS:
-                    continue
-                matrix.append((workload_name, impl_name, depth, n_events))
+                is_slow = (workload_name, impl_name, depth) in _SLOW_CELLS
+                excluded = is_slow and not args.include_slow
+                matrix.append((workload_name, impl_name, depth, n_events, excluded))
     return matrix
+
+
+def _excluded_cell(
+    args: argparse.Namespace, workload_name: str, impl_name: str, depth: int, n_events: int
+) -> CellResult:
+    repro = _repro_command(args, workload_name, impl_name, depth)
+    cell_key = f"{workload_name}/{impl_name}/d{depth}/n{n_events}/t{args.max_tick}"
+    est = _estimate_seconds(workload_name, impl_name, depth, n_events, args.repeats)
+    return CellResult(
+        cell_key=cell_key,
+        status="excluded",
+        workload=workload_name,
+        workload_params={"depth": depth, "n_events": n_events, "max_tick": args.max_tick},
+        impl=impl_name,
+        impl_description=IMPLS[impl_name].description,
+        repeats=0,
+        repro_command=repro,
+        setup={"commands": 0},
+        measured=None,
+        throughput=None,
+        latency_ns=None,
+        per_repeat=[],
+        memory=None,
+        estimated_seconds=est,
+        error="excluded from the default matrix (slow); pass --include-slow to run it",
+    )
 
 
 def _run_matrix(args: argparse.Namespace) -> list[CellResult]:
     matrix = _build_matrix(args)
     results: list[CellResult] = []
-    for workload_name, impl_name, depth, n_events in matrix:
+    for workload_name, impl_name, depth, n_events, excluded in matrix:
+        if excluded:
+            results.append(_excluded_cell(args, workload_name, impl_name, depth, n_events))
+            continue
         workload = _build_workload(
             workload_name, seed=args.seed, depth=depth, max_tick=args.max_tick, n_events=n_events
         )
@@ -157,25 +193,22 @@ def _run_matrix(args: argparse.Namespace) -> list[CellResult]:
 
 def _print_list(args: argparse.Namespace) -> None:
     matrix = _build_matrix(args)
+    runnable = [row for row in matrix if not row[4]]
+    excluded = [row for row in matrix if row[4]]
+
     total_seconds = 0.0
     print(f"{'workload':<12} {'impl':<15} {'depth':>8} {'events':>8} {'est. seconds':>13}")
-    for workload_name, impl_name, depth, n_events in matrix:
+    for workload_name, impl_name, depth, n_events, _excluded in runnable:
         est = _estimate_seconds(workload_name, impl_name, depth, n_events, args.repeats)
         total_seconds += est
         print(f"{workload_name:<12} {impl_name:<15} {depth:>8} {n_events:>8} {est:>13.1f}")
-    excluded = [
-        (w, i, d)
-        for w in _resolve_names(args.workload, WORKLOADS)
-        for d in (args.depth or _DEFAULT_DEPTHS.get(w, [0]))
-        for i in _resolve_names(args.impl, IMPLS)
-        if not args.include_slow and (w, i, d) in _SLOW_CELLS
-    ]
     if excluded:
         print(f"\n{len(excluded)} cell(s) excluded by default (pass --include-slow):")
-        for w, i, d in excluded:
-            print(f"  {w}/{i}/d{d}")
+        for workload_name, impl_name, depth, _n_events, _excluded in excluded:
+            print(f"  {workload_name}/{impl_name}/d{depth}")
     print(
-        f"\n{len(matrix)} cells, estimated {total_seconds:.1f}s total (rough, dev-machine estimate)"
+        f"\n{len(runnable)} cells, estimated {total_seconds:.1f}s total "
+        "(rough, dev-machine estimate)"
     )
 
 

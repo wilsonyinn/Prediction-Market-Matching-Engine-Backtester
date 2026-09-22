@@ -52,6 +52,11 @@ def _depth(cell: dict[str, Any]) -> int:
     return int(depth) if isinstance(depth, (int, float)) else 0
 
 
+def _max_tick(cell: dict[str, Any]) -> int:
+    max_tick = cell.get("workload_params", {}).get("max_tick", 100)
+    return int(max_tick) if isinstance(max_tick, (int, float)) else 100
+
+
 def _fmt(value: float | int | None, digits: int = 1) -> str:
     if value is None:
         return "—"
@@ -64,33 +69,43 @@ def _latency_table(cells: list[dict[str, Any]]) -> str:
     if not ok_cells and not other_cells:
         return ""
 
-    ok_cells.sort(key=lambda c: (c["impl"], _depth(c)))
-    # ok_cells is sorted by (impl, depth) ascending, so the first cell seen for
-    # each impl is necessarily its minimum-depth row -- the scaling baseline.
-    baseline_p50: dict[str, float] = {}
-    for c in ok_cells:
-        baseline_p50.setdefault(c["impl"], c["latency_ns"]["p50"])
+    multi_tick = len({_max_tick(c) for c in ok_cells + other_cells}) > 1
 
+    ok_cells.sort(key=lambda c: (_max_tick(c), c["impl"], _depth(c)))
+    # sorted by (max_tick, impl, depth) ascending, so the first cell seen for each
+    # (max_tick, impl) pair is necessarily its minimum-depth row -- the scaling
+    # baseline. Keyed on max_tick too: sparse_book runs at two tick sizes must not
+    # share a baseline, or the scaling column compares across an unrelated axis.
+    baseline_p50: dict[tuple[int, str], float] = {}
+    for c in ok_cells:
+        baseline_p50.setdefault((_max_tick(c), c["impl"]), c["latency_ns"]["p50"])
+
+    tick_col = " tick |" if multi_tick else ""
+    tick_sep = "---:|" if multi_tick else ""
     lines = [
-        "| depth | impl | events | events/s | trades/s | p50 µs | p95 µs | p99 µs | "
-        "max µs | vs min depth |",
-        "|---:|:---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        f"|{tick_col} depth | impl | events | events/s | trades/s | p50 µs | p95 µs | "
+        "p99 µs | max µs | vs min depth |",
+        f"|{tick_sep}---:|:---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     footnotes: list[str] = []
     for c in ok_cells:
         lat = c["latency_ns"]
         thr = c["throughput"]
-        base = baseline_p50.get(c["impl"])
+        base = baseline_p50.get((_max_tick(c), c["impl"]))
         scale = f"{lat['p50'] / base:.1f}x" if base else "—"
+        tick_cell = f" {_max_tick(c)} |" if multi_tick else ""
         lines.append(
-            f"| {_depth(c):,} | {c['impl']} | {c['measured']['commands']:,} | "
+            f"|{tick_cell} {_depth(c):,} | {c['impl']} | {c['measured']['commands']:,} | "
             f"{_fmt(thr['events_per_sec'], 0)} | {_fmt(thr['trades_per_sec'], 0)} | "
             f"{lat['p50'] / 1000:.2f} | {lat['p95'] / 1000:.2f} | {lat['p99'] / 1000:.2f} | "
             f"{lat['max'] / 1000:.2f} | {scale} |"
         )
     for i, c in enumerate(other_cells, start=1):
         marker = f"[{i}]"
-        lines.append(f"| {_depth(c):,} | {c['impl']} | — | — | — | — | — | — | — | {marker} |")
+        tick_cell = f" {_max_tick(c)} |" if multi_tick else ""
+        lines.append(
+            f"|{tick_cell} {_depth(c):,} | {c['impl']} | — | — | — | — | — | — | — | {marker} |"
+        )
         footnotes.append(
             f"{marker} status=`{c['status']}`: {c.get('error') or 'not measured'}. "
             f"Reproduce: `{c['repro_command']}`"

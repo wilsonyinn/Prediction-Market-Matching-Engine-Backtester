@@ -7,7 +7,7 @@ exchange's decimal sizes happens only at the data-ingestion boundary (Phase 3).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -111,6 +111,17 @@ class RestingOrder:
 
     Not frozen: a frozen dataclass's ``__setattr__`` goes through
     ``object.__setattr__``, which would cost a function call on every partial fill.
+
+    ``_dll_prev``/``_dll_next`` are book-private scratch space for ``ArrayBook``'s
+    intrusive doubly-linked-list FIFO (see its Phase 2 optimization log entry in
+    ``docs/DESIGN.md``): a storage-layer concern leaking into a type this book
+    shares with ``NaiveBook`` and ``TreeBook``, which never touch these fields.
+    That leak is the wart this optimization accepts, named honestly rather than
+    hidden -- the alternative (a per-node wrapper class, or a book-specific
+    subclass) was rejected because it would either allocate a node per rested
+    order or require the engine to construct book-specific objects, both changes
+    Phase 1's protocol was built to avoid. ``repr=False`` on both: printing a
+    resting order must not recurse into its neighbors' neighbors.
     """
 
     order_id: str
@@ -123,6 +134,8 @@ class RestingOrder:
     expires_at: int | None
     owner_id: str | None
     entry_seq: int
+    _dll_prev: RestingOrder | None = field(default=None, repr=False, compare=False)
+    _dll_next: RestingOrder | None = field(default=None, repr=False, compare=False)
 
     @classmethod
     def from_order(cls, order: Order, entry_seq: int) -> RestingOrder:

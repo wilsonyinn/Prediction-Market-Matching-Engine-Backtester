@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "run_id": "20260922T194511Z-ae87479-memory",
+  "label": "opt4-dll",
+  "mode": "memory",
+  "started_at_utc": "20260922T194511Z",
+  "environment": {
+    "python_version": "3.13.2",
+    "python_implementation": "CPython",
+    "os": "Darwin",
+    "os_release": "25.6.0",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_brand": "Apple M5",
+    "cpu_count_logical": 10,
+    "git_commit": "ae874791834eebc1b2d1c48b88e7ba3600651883",
+    "git_dirty": true,
+    "timer": {
+      "name": "perf_counter_ns",
+      "resolution_ns": 41.666666666666664,
+      "overhead_ns_median": 42,
+      "overhead_ns_p99": 83
+    }
+  },
+  "methodology": {
+    "latency_unit": "ns_per_engine_call",
+    "percentile_method": "nearest_rank",
+    "aggregation_across_repeats": "median_of_per_repeat_percentiles",
+    "warmup_events": 5000,
+    "gc_mode": "frozen",
+    "setup_method": "deepcopy_per_repeat"
+  },
+  "results": [
+    {
+      "cell_key": "deep_book/array/d10000/n100/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100,
+        "depth": 10000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl array --depth 10000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 100,
+        "events": 315,
+        "trades": 90,
+        "rejects": 0,
+        "cancel_rejects": 0
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 2008904,
+        "bytes_per_resting_order": 200.8904,
+        "peak_bytes": 2009896,
+        "current_bytes_end": 1998128,
+        "rss_peak_bytes": 25608192
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/array_baseline/d10000/n100/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100,
+        "depth": 10000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "array_baseline",
+      "impl_description": "frozen Phase 1 ArrayBook, kept for before/after comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl array_baseline --depth 10000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 100,
+        "events": 315,
+        "trades": 90,
+        "rejects": 0,
+        "cancel_rejects": 0
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 2795768,
+        "bytes_per_resting_order": 279.5768,
+        "peak_bytes": 2796600,
+        "current_bytes_end": 2782320,
+        "rss_peak_bytes": 29769728
+      },
+      "estimated_seconds": null,
+      "error": null
+    }
+  ]
+}

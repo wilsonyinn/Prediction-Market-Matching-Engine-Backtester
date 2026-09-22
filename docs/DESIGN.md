@@ -670,3 +670,79 @@ helper -- a real but small tax, and the resulting code is still obviously correc
 sync). Kept on the combination of a small, real, consistent win and a small,
 bounded duplication cost, not because it independently clears the pre-declared
 threshold.
+
+### 4. `ArrayBook`: intrusive doubly-linked-list FIFO, replacing `OrderedDict`
+
+The optimization Phase 1 explicitly deferred to be profiled first (see
+`array_book.py`'s original module docstring and the `array_book_baseline.py`
+entry above).
+
+**Hypothesis, recorded before measuring**: `front()`'s `next(iter(od.values()),
+None)` measured ~43ns against a DLL head-read's ~5ns in isolation. Weighted by
+call frequency in the three profiled cells: `front()` runs roughly once per
+submit on `balanced` (mostly non-crossing, so ~0.6 calls/command) but **once per
+maker consumed** on `sweep_heavy`, where a single sweep crosses many levels.
+Forecast: negligible on `balanced`, a real win on `sweep_heavy`, something in
+between on `deep_book`.
+
+**Change**: `src/engine/array_book.py` -- `_bid_levels`/`_ask_levels` (arrays of
+`OrderedDict`) replaced by `_bid_head`/`_bid_tail`/`_bid_count` (and the ask
+equivalents), arrays of `RestingOrder | None` / `RestingOrder | None` / `int`.
+`front()` is now `head[price]`, one list read, no iterator. The links live
+directly on `RestingOrder` as `_dll_prev`/`_dll_next` (documented there as
+book-private scratch `NaiveBook`/`TreeBook` never touch -- the design's one
+acknowledged wart, named rather than hidden) so resting an order costs no
+allocation beyond the `RestingOrder` itself. Nulling both links on `remove` is
+not optional: a removed order still pointing into the list would keep off-book
+objects reachable and turn a future double-remove into silent corruption instead
+of a clean no-op.
+
+Confined entirely to `array_book.py` plus the two new fields on the shared
+`RestingOrder` (unused by every other book), so `array_baseline` gives a true
+same-process A/B.
+
+**Protocol impact: none.** `front`'s contract (FIFO-first order at `(side,
+price)`, `None` if empty or out of range, never raises) is unchanged, so the
+conformance and differential suites are the acceptance gate -- this ships with
+**zero new correctness tests** for the engine layer. All 321 engine/property/
+differential tests (`HYPOTHESIS_PROFILE=ci`, thousands of examples) pass
+unmodified. That is the return on Phase 1 having built the protocol this way.
+
+**A real bug found while first running the benchmark, fixed before any number was
+measured**: `copy.deepcopy` recurses one Python stack frame per `_dll_next` link
+when copying a price level, and `balanced`'s setup at depth 10,000 concentrates
+well over 1,000 orders at a single price tick (passive offsets cluster near the
+touch by design), exceeding Python's default recursion limit and raising
+`RecursionError` -- silently breaking the harness's own deepcopy-per-repeat
+technique for exactly the scale this phase cares about most. Fixed with
+`bench/harness.py`'s `_deepcopy_engine`: raises `sys.setrecursionlimit()` for the
+duration of the copy, restores it immediately after. Regression test in
+`tests/bench/test_harness.py`. Recorded here because it's a real, non-obvious
+interaction between a storage-layer choice and a benchmarking technique, not
+something either was designed against in isolation.
+
+**`array` vs. `array_baseline`, same session** (9 repeats each):
+
+| cell | p50 baseline | p50 array | Δp50 | events/s baseline | events/s array | Δthroughput |
+|---|---:|---:|---:|---:|---:|---:|
+| balanced/d10,000 | 1375ns | 1375ns | 0% | 1,506,523 | 1,548,849 | +2.8% |
+| sweep_heavy/d10,000 | 1334ns | 1334ns | 0% | 1,539,007 | 1,578,598 | +2.6% |
+| deep_book/d100,000 | 1375ns | 1333ns | **-3.1%** | 1,370,902 | 1,520,341 | **+10.9%** |
+
+**Memory** (depth 10,000, `deep_book` setup, `bytes_per_resting_order`):
+**200.9 B/order (`array`) vs. 279.6 B/order (`array_baseline`) -- a 28% reduction**,
+not the small increase the design anticipated. Two extra pointer slots on an
+already-`__slots__`-ed `RestingOrder` cost far less than the `OrderedDict` per
+level they replace (a hash table with its own internal linked structure for
+insertion order, one per occupied price tick).
+
+**Verdict: kept, clearly.** `deep_book`'s throughput win (+10.9%) is the largest
+single number in this optimization log, matching the forecast that `front()`'s
+call frequency (not `balanced`'s, which barely moved) is where this change pays
+off. Combined with a real memory *reduction* and zero new correctness surface,
+this clears the pre-declared bar outright on `deep_book` and is strictly
+beneficial elsewhere. The forecast's shape (negligible on `balanced`, a real win
+where `front()` is hot) held; its magnitude on `deep_book` and the memory
+direction were both larger/better than predicted -- worth recording as a case
+where measuring changed the conclusion for the better, the outcome this whole
+log-before-you-decide methodology exists to catch either direction of.

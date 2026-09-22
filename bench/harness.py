@@ -16,6 +16,7 @@ import os
 import platform
 import resource
 import subprocess
+import sys
 import time
 import tracemalloc
 from dataclasses import dataclass
@@ -206,6 +207,27 @@ def replay_untimed(engine: MatchingEngine, commands: tuple[Command, ...]) -> _Re
     return _ReplayOutcome(events, trades, rejects, cancel_rejects)
 
 
+def _deepcopy_engine(engine: MatchingEngine) -> MatchingEngine:
+    """``copy.deepcopy``, with Python's recursion limit temporarily raised.
+
+    ``ArrayBook``'s intrusive doubly-linked-list FIFO (see ``docs/DESIGN.md``'s
+    Phase 2 optimization log) means deepcopy recurses one Python stack frame per
+    ``_dll_next`` link when it walks a price level's resting orders. A level with
+    more orders than the default recursion limit (1000) raises ``RecursionError``
+    -- discovered while first benchmarking the DLL swap: a ``balanced`` setup at
+    depth 10,000 concentrates well over a thousand orders at a single price tick,
+    since passive offsets cluster near the touch by design (see
+    ``bench/workloads.py``). The limit is restored immediately after, so this has
+    no effect on anything else in the process.
+    """
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, 100_000))
+    try:
+        return copy.deepcopy(engine)
+    finally:
+        sys.setrecursionlimit(old_limit)
+
+
 class RepeatResult(TypedDict):
     """One repeat's summary: percentiles, engine time, and GC activity."""
 
@@ -392,7 +414,7 @@ def run_cell(  # noqa: PLR0913
         )
 
     if warmup:
-        warmup_engine = copy.deepcopy(base_engine)
+        warmup_engine = _deepcopy_engine(base_engine)
         warmup_commands = workload.measured[:warmup]
         _run_one_repeat(
             warmup_engine, warmup_commands, -1, max_seconds=max_seconds, gc_mode=gc_mode
@@ -402,7 +424,7 @@ def run_cell(  # noqa: PLR0913
     last_outcome = _ReplayOutcome(0, 0, 0, 0)
     fully_completed = True
     for r in range(repeats):
-        repeat_engine = copy.deepcopy(base_engine)
+        repeat_engine = _deepcopy_engine(base_engine)
         result, outcome, completed_fully = _run_one_repeat(
             repeat_engine, workload.measured, r, max_seconds=max_seconds, gc_mode=gc_mode
         )

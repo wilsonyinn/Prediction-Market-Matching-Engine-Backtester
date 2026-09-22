@@ -364,7 +364,10 @@ def run_cell(  # noqa: PLR0913
     real run, but running it against the real engine would consume part of the
     measured command list and leave the book in a different state.
     """
-    cell_key = f"{workload.name}/{impl.name}/d{_infer_depth(workload)}/n{len(workload.measured)}"
+    cell_key = (
+        f"{workload.name}/{impl.name}/d{_infer_depth(workload)}/"
+        f"n{len(workload.measured)}/t{workload.max_tick}"
+    )
 
     base_engine = MatchingEngine(book=impl.factory(max_tick=workload.max_tick))
     setup_outcome = replay_untimed(base_engine, workload.setup)
@@ -514,7 +517,8 @@ def run_memory_cell(workload: Workload, impl: Impl, *, repro_command: str) -> Ce
     baseline or any C-level allocation.
     """
     cell_key = (
-        f"{workload.name}/{impl.name}/d{_infer_depth(workload)}/n{len(workload.measured)}/mem"
+        f"{workload.name}/{impl.name}/d{_infer_depth(workload)}/"
+        f"n{len(workload.measured)}/t{workload.max_tick}/mem"
     )
     engine = MatchingEngine(book=impl.factory(max_tick=workload.max_tick))
 

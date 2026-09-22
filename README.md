@@ -62,9 +62,13 @@ story, and the one Phase 2's four optimizations targeted:
 | optimized | 10,000 | array | 1,605,592 | 1.50 | 8.75 | 0.9x |
 | optimized | 100,000 | array | 1,470,370 | 1.38 | 9.42 | 0.9x |
 
+![deep_book: p50 and p99 latency vs. book depth, log-log, one line per implementation](results/charts/deep_book-latency-vs-depth-optimized.svg)
+
 Full tables (all four workloads, all four implementations, latency and memory) are
 generated from the committed `results/*.json` — see
-[`results/RESULTS.md`](results/RESULTS.md).
+[`results/RESULTS.md`](results/RESULTS.md). Charts (`results/charts/*.svg`, via
+`make charts`) are reproducible: re-rendering unchanged data produces byte-identical
+SVGs.
 
 **Methodology, honestly**: this ran on an unisolated consumer laptop (Apple M5, no CPU
 pinning, no isolated cores), not a dedicated benchmarking rig — treat `p99` as the

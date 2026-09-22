@@ -1,7 +1,7 @@
 PY ?= .venv/bin/python
 LABEL ?= dev
 
-.PHONY: install lint format typecheck test cov all bench bench-full bench-memory bench-report profile
+.PHONY: install lint format typecheck test cov all bench bench-full bench-memory bench-report profile charts
 
 install:
 	python3 -m venv .venv
@@ -43,6 +43,9 @@ bench-memory:
 
 bench-report:
 	$(PY) -m bench.report --results results --out results/RESULTS.md
+
+charts:
+	$(PY) -m bench.plot --results results --out results/charts --label $(LABEL)
 
 # One cell's measured loop under cProfile: `make profile WORKLOAD=balanced IMPL=array DEPTH=10000`
 WORKLOAD ?= balanced

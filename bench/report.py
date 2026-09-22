@@ -47,12 +47,14 @@ def load_cells(results_dir: Path) -> list[dict[str, Any]]:
     return list(by_key.values())
 
 
-def _depth(cell: dict[str, Any]) -> int:
+def depth_of(cell: dict[str, Any]) -> int:
+    """The workload depth a cell was measured at, or 0 if unset."""
     depth = cell.get("workload_params", {}).get("depth", 0)
     return int(depth) if isinstance(depth, (int, float)) else 0
 
 
-def _max_tick(cell: dict[str, Any]) -> int:
+def max_tick_of(cell: dict[str, Any]) -> int:
+    """The tick range (``max_tick``) a cell was measured at, or 100 if unset."""
     max_tick = cell.get("workload_params", {}).get("max_tick", 100)
     return int(max_tick) if isinstance(max_tick, (int, float)) else 100
 
@@ -69,10 +71,10 @@ def _latency_table(cells: list[dict[str, Any]]) -> str:
     if not ok_cells and not other_cells:
         return ""
 
-    multi_tick = len({_max_tick(c) for c in ok_cells + other_cells}) > 1
+    multi_tick = len({max_tick_of(c) for c in ok_cells + other_cells}) > 1
     multi_label = len({c["_label"] for c in ok_cells + other_cells}) > 1
 
-    ok_cells.sort(key=lambda c: (c["_label"], _max_tick(c), c["impl"], _depth(c)))
+    ok_cells.sort(key=lambda c: (c["_label"], max_tick_of(c), c["impl"], depth_of(c)))
     # sorted by (label, max_tick, impl, depth) ascending, so the first cell seen
     # for each (label, max_tick, impl) triple is necessarily its minimum-depth
     # row -- the scaling baseline. Keyed on label and max_tick too: a "baseline"
@@ -80,7 +82,7 @@ def _latency_table(cells: list[dict[str, Any]]) -> str:
     # must never share a scaling baseline with each other.
     baseline_p50: dict[tuple[str, int, str], float] = {}
     for c in ok_cells:
-        baseline_p50.setdefault((c["_label"], _max_tick(c), c["impl"]), c["latency_ns"]["p50"])
+        baseline_p50.setdefault((c["_label"], max_tick_of(c), c["impl"]), c["latency_ns"]["p50"])
 
     label_col = " label |" if multi_label else ""
     label_sep = ":---|" if multi_label else ""
@@ -95,12 +97,12 @@ def _latency_table(cells: list[dict[str, Any]]) -> str:
     for c in ok_cells:
         lat = c["latency_ns"]
         thr = c["throughput"]
-        base = baseline_p50.get((c["_label"], _max_tick(c), c["impl"]))
+        base = baseline_p50.get((c["_label"], max_tick_of(c), c["impl"]))
         scale = f"{lat['p50'] / base:.1f}x" if base else "—"
         label_cell = f" {c['_label']} |" if multi_label else ""
-        tick_cell = f" {_max_tick(c)} |" if multi_tick else ""
+        tick_cell = f" {max_tick_of(c)} |" if multi_tick else ""
         lines.append(
-            f"|{label_cell}{tick_cell} {_depth(c):,} | {c['impl']} | "
+            f"|{label_cell}{tick_cell} {depth_of(c):,} | {c['impl']} | "
             f"{c['measured']['commands']:,} | {_fmt(thr['events_per_sec'], 0)} | "
             f"{_fmt(thr['trades_per_sec'], 0)} | {lat['p50'] / 1000:.2f} | "
             f"{lat['p95'] / 1000:.2f} | {lat['p99'] / 1000:.2f} | {lat['max'] / 1000:.2f} | "
@@ -109,9 +111,9 @@ def _latency_table(cells: list[dict[str, Any]]) -> str:
     for i, c in enumerate(other_cells, start=1):
         marker = f"[{i}]"
         label_cell = f" {c['_label']} |" if multi_label else ""
-        tick_cell = f" {_max_tick(c)} |" if multi_tick else ""
+        tick_cell = f" {max_tick_of(c)} |" if multi_tick else ""
         lines.append(
-            f"|{label_cell}{tick_cell} {_depth(c):,} | {c['impl']} | — | — | — | — | — | — "
+            f"|{label_cell}{tick_cell} {depth_of(c):,} | {c['impl']} | — | — | — | — | — | — "
             f"| — | {marker} |"
         )
         footnotes.append(
@@ -129,7 +131,7 @@ def _memory_table(cells: list[dict[str, Any]]) -> str:
     if not mem_cells:
         return ""
     multi_label = len({c["_label"] for c in mem_cells}) > 1
-    mem_cells.sort(key=lambda c: (c["_label"], c["impl"], _depth(c)))
+    mem_cells.sort(key=lambda c: (c["_label"], c["impl"], depth_of(c)))
 
     label_col = " label |" if multi_label else ""
     label_sep = ":---|" if multi_label else ""
@@ -142,7 +144,7 @@ def _memory_table(cells: list[dict[str, Any]]) -> str:
         m = c["memory"]
         label_cell = f" {c['_label']} |" if multi_label else ""
         lines.append(
-            f"|{label_cell} {_depth(c):,} | {c['impl']} | {m['book_bytes_after_setup']:,} | "
+            f"|{label_cell} {depth_of(c):,} | {c['impl']} | {m['book_bytes_after_setup']:,} | "
             f"{m['bytes_per_resting_order']:.1f} | {m['peak_bytes']:,} | "
             f"{m['current_bytes_end']:,} |"
         )

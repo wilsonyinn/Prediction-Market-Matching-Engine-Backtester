@@ -585,3 +585,59 @@ was designed to filter out. Kept because the change is a one-line, zero-risk,
 zero-memory-cost reordering with no readability cost, and the evidence -- while not
 hitting the letter of the pre-declared bar on `events_per_sec` -- clearly clears its
 intent.
+
+### 2. `_validate`: `isinstance` pair → `type(x) is not int`
+
+**Hypothesis**: an isolated microbenchmark (one call, in a tight loop, nothing
+else happening) showed `type(x) is not int` at roughly half the cost of
+`not isinstance(x, int) or isinstance(x, bool)`. Estimated ~7% of total command
+time based on that isolated number and `_validate`'s ~8% share of profiled
+`tottime` in the initial three-cell profile.
+
+**Change**: `src/engine/engine.py`, `_validate`'s price and quantity checks.
+Exactly equivalent for this purpose (`type(True) is bool`, not `int`, so `bool` is
+still rejected; also rejects any other `int` subclass, arguably more correct than
+the two-`isinstance` form). Lives in shared `engine.py`, so before/after across
+labeled files again, not an `array_baseline` A/B.
+
+**Before → after** (vs. optimization 1's numbers, `array`, 7 repeats each):
+
+| cell | p50 before | p50 after | Δp50 | events/s before | events/s after | Δthroughput |
+|---|---:|---:|---:|---:|---:|---:|
+| balanced/d10,000 | 1417ns | 1417ns | 0% | 1,459,782 | 1,476,249 | +1.1% |
+| sweep_heavy/d10,000 | 1375ns | 1375ns | 0% | 1,498,015 | 1,508,995 | +0.7% |
+| deep_book/d100,000 | 1458ns | 1416ns | -2.9% | 1,350,003 | 1,365,677 | +1.2% |
+
+**Verdict: no significant change against the pre-declared ≥5% bar** -- the isolated
+microbenchmark overstated the real-world effect, because these two checks are a
+small fraction of a command's total cost once matching, event construction, and
+`seq` bookkeeping are included; `_validate`'s ~8% share of profiled time was itself
+inflated by cProfile's well-known per-call overhead bias against small, frequently
+called functions (noted in the profiling methodology above). **Kept anyway**: it is
+a lossless simplification (one identity check instead of two calls, same
+behavior, covered by the unchanged existing test suite) that also removes two
+`# type: ignore[redundant-expr]` suppressions `mypy` needed for the old form --
+a real code-quality improvement independent of the speed claim, which is reported
+honestly as not holding up at the whole-command level.
+
+**A related cost was measured, in a real throwaway variant, but deliberately not
+adopted**: commenting out `_validate`'s `UNKNOWN_SIDE`/`UNKNOWN_ORDER_TYPE`
+`isinstance` checks entirely (the ones a type-checked caller can never trigger --
+see Phase 1's validation-order entry), then reverted immediately after
+measuring -- never committed as a real change:
+
+| cell | p50 with checks | p50 without | Δp50 | events/s with | events/s without | Δthroughput |
+|---|---:|---:|---:|---:|---:|---:|
+| balanced/d10,000 | 1417ns | 1334ns | -5.9% | 1,476,249 | 1,532,889 | +3.8% |
+| sweep_heavy/d10,000 | 1375ns | 1292ns | -6.0% | 1,508,995 | 1,553,517 | +2.9% |
+| deep_book/d100,000 | 1416ns | 1375ns | -2.9% | 1,365,677 | 1,396,826 | +2.3% |
+
+A real, measurable cost (~3-6% p50), but well short of the "single largest
+opportunity" an initial back-of-envelope estimate suggested before actually
+measuring it -- a second instance, alongside entry #2 itself, of an isolated
+estimate overstating a change's effect at the whole-command level. **Not
+adopted**, regardless of the size of the number: those checks exist specifically
+so a runtime-malformed order (e.g. from Phase 3's deserialized market data) is
+rejected with an `OrderRejected` event instead of crashing the engine, and that
+guarantee is worth its measured cost. The number is recorded here as the honest
+price of paying it, not as an invitation to remove it later.

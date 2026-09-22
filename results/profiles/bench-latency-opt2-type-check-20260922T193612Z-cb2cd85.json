@@ -1,0 +1,326 @@
+{
+  "schema_version": 1,
+  "run_id": "20260922T193612Z-cb2cd85-latency",
+  "label": "opt2-type-check",
+  "mode": "latency",
+  "started_at_utc": "20260922T193612Z",
+  "environment": {
+    "python_version": "3.13.2",
+    "python_implementation": "CPython",
+    "os": "Darwin",
+    "os_release": "25.6.0",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_brand": "Apple M5",
+    "cpu_count_logical": 10,
+    "git_commit": "cb2cd85683e70e70b4e351a470a90d26eb08f343",
+    "git_dirty": true,
+    "timer": {
+      "name": "perf_counter_ns",
+      "resolution_ns": 41.666666666666664,
+      "overhead_ns_median": 42,
+      "overhead_ns_p99": 83
+    }
+  },
+  "methodology": {
+    "latency_unit": "ns_per_engine_call",
+    "percentile_method": "nearest_rank",
+    "aggregation_across_repeats": "median_of_per_repeat_percentiles",
+    "warmup_events": 5000,
+    "gc_mode": "frozen",
+    "setup_method": "deepcopy_per_repeat"
+  },
+  "results": [
+    {
+      "cell_key": "balanced/array/d10000/n60000/t100",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 60000,
+        "depth": 10000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 7,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl array --depth 10000 --seed 1 --max-tick 100 --repeats 7 --mode latency",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 60000,
+        "commands_completed_median": 60000,
+        "events": 191360,
+        "trades": 48741,
+        "rejects": 0,
+        "cancel_rejects": 2273,
+        "engine_seconds_median": 0.129625854
+      },
+      "throughput": {
+        "events_per_sec": 1476248.711927483,
+        "commands_per_sec": 462870.62455920246,
+        "trades_per_sec": 376012.95186066814
+      },
+      "latency_ns": {
+        "p50": 1417,
+        "p95": 6833,
+        "p99": 9459,
+        "max": 228541,
+        "max_worst_repeat": 299458
+      },
+      "per_repeat": [
+        {
+          "repeat": 0,
+          "commands": 60000,
+          "engine_seconds": 0.130016064,
+          "p50": 1417,
+          "p95": 6834,
+          "p99": 9500,
+          "max": 258916,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 1,
+          "commands": 60000,
+          "engine_seconds": 0.12963333,
+          "p50": 1417,
+          "p95": 6792,
+          "p99": 9458,
+          "max": 299458,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 2,
+          "commands": 60000,
+          "engine_seconds": 0.129625854,
+          "p50": 1417,
+          "p95": 6833,
+          "p99": 9500,
+          "max": 216917,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 3,
+          "commands": 60000,
+          "engine_seconds": 0.129587936,
+          "p50": 1416,
+          "p95": 6833,
+          "p99": 9500,
+          "max": 214708,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 4,
+          "commands": 60000,
+          "engine_seconds": 0.129832952,
+          "p50": 1417,
+          "p95": 6833,
+          "p99": 9459,
+          "max": 228541,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 5,
+          "commands": 60000,
+          "engine_seconds": 0.129556557,
+          "p50": 1417,
+          "p95": 6833,
+          "p99": 9458,
+          "max": 229583,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 6,
+          "commands": 60000,
+          "engine_seconds": 0.129424348,
+          "p50": 1416,
+          "p95": 6833,
+          "p99": 9458,
+          "max": 204667,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "memory": null,
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "sweep_heavy/array/d10000/n60000/t100",
+      "status": "ok",
+      "workload": "sweep_heavy",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 60000,
+        "depth": 10000,
+        "max_tick": 100,
+        "levels_per_sweep": 8,
+        "refills_per_sweep": 12
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 7,
+      "repro_command": "python -m bench.run_bench --workload sweep_heavy --impl array --depth 10000 --seed 1 --max-tick 100 --repeats 7 --mode latency",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 60000,
+        "commands_completed_median": 60000,
+        "events": 229790,
+        "trades": 56955,
+        "rejects": 0,
+        "cancel_rejects": 0,
+        "engine_seconds_median": 0.1522802
+      },
+      "throughput": {
+        "events_per_sec": 1508994.6033693152,
+        "commands_per_sec": 394010.51482727233,
+        "trades_per_sec": 374014.4811997883
+      },
+      "latency_ns": {
+        "p50": 1375,
+        "p95": 14125,
+        "p99": 20417,
+        "max": 548709,
+        "max_worst_repeat": 563583
+      },
+      "per_repeat": [
+        {
+          "repeat": 0,
+          "commands": 60000,
+          "engine_seconds": 0.152146373,
+          "p50": 1375,
+          "p95": 14084,
+          "p99": 20292,
+          "max": 548042,
+          "gc_collections": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 1,
+          "commands": 60000,
+          "engine_seconds": 0.151684555,
+          "p50": 1375,
+          "p95": 14084,
+          "p99": 20333,
+          "max": 555209,
+          "gc_collections": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 2,
+          "commands": 60000,
+          "engine_seconds": 0.152376515,
+          "p50": 1375,
+          "p95": 14208,
+          "p99": 20417,
+          "max": 563583,
+          "gc_collections": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 3,
+          "commands": 60000,
+          "engine_seconds": 0.152239092,
+          "p50": 1375,
+          "p95": 14125,
+          "p99": 20417,
+          "max": 548709,
+          "gc_collections": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 4,
+          "commands": 60000,
+          "engine_seconds": 0.152361959,
+          "p50": 1375,
+          "p95": 14125,
+          "p99": 20375,
+          "max": 536417,
+          "gc_collections": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 5,
+          "commands": 60000,
+          "engine_seconds": 0.1522802,
+          "p50": 1375,
+          "p95": 14167,
+          "p99": 20458,
+          "max": 554333,
+          "gc_collections": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 6,
+          "commands": 60000,
+          "engine_seconds": 0.15266086,
+          "p50": 1375,
+          "p95": 14208,
+          "p99": 20458,
+          "max": 525167,
+          "gc_collections": [
+            1,
+            0,
+            0
+          ]
+        }
+      ],
+      "memory": null,
+      "estimated_seconds": null,
+      "error": null
+    }
+  ]
+}

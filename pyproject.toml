@@ -47,6 +47,11 @@ convention = "google"
 # limits is preferable to scattering noqa comments over the core algorithm.
 max-branches = 15
 max-returns = 12
+# bench/harness.py's measured loop dispatches on command type inline (deliberately
+# -- see its docstring on why field access happens outside the timed window), which
+# reads as more statements than splitting it into helpers would, even though a
+# helper call per command would cost real nanoseconds inside the timed region.
+max-statements = 60
 
 [tool.ruff.lint.per-file-ignores]
 # TC (type-checking-block imports) exists to avoid runtime import cost and circular

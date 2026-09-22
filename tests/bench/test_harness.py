@@ -12,7 +12,7 @@ from __future__ import annotations
 import copy
 from typing import cast
 
-from bench.harness import percentile_nearest_rank, replay_untimed, run_cell
+from bench.harness import percentile_nearest_rank, replay_untimed, run_cell, run_memory_cell
 from bench.impls import IMPLS
 from bench.workloads import balanced
 
@@ -98,6 +98,23 @@ def test_run_cell_produces_a_self_consistent_result() -> None:
     assert len(result["per_repeat"]) == 2
     assert result["throughput"] is not None
     assert result["throughput"]["events_per_sec"] > 0
+
+
+def test_run_memory_cell_captures_setup_allocations() -> None:
+    """Regression test: tracemalloc must start before setup runs, not after.
+
+    An earlier version started tracemalloc after replaying setup, which measures
+    zero setup memory no matter how deep the book is -- tracemalloc only counts
+    allocations made while it's enabled.
+    """
+    workload = balanced(seed=1, n_events=20, depth=200, max_tick=100)
+    result = run_memory_cell(workload, IMPLS["array"], repro_command="pytest")
+
+    assert result["status"] == "ok"
+    assert result["memory"] is not None
+    assert result["memory"]["book_bytes_after_setup"] > 0
+    assert result["memory"]["bytes_per_resting_order"] > 0
+    assert result["memory"]["peak_bytes"] >= result["memory"]["book_bytes_after_setup"]
 
 
 def test_run_cell_skips_too_slow_below_sample_floor() -> None:

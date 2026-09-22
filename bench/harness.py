@@ -14,8 +14,10 @@ import gc
 import math
 import os
 import platform
+import resource
 import subprocess
 import time
+import tracemalloc
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, TypedDict
 
@@ -303,6 +305,17 @@ def _run_one_repeat(
     return result, outcome, completed == n
 
 
+class MemoryResult(TypedDict):
+    """Memory footprint for one (workload, implementation) cell."""
+
+    tracemalloc_frames: int
+    book_bytes_after_setup: int
+    bytes_per_resting_order: float
+    peak_bytes: int
+    current_bytes_end: int
+    rss_peak_bytes: int
+
+
 class CellResult(TypedDict):
     """One (workload, implementation) cell as it appears in the results JSON."""
 
@@ -319,7 +332,7 @@ class CellResult(TypedDict):
     throughput: dict[str, float] | None
     latency_ns: dict[str, int] | None
     per_repeat: list[RepeatResult]
-    memory: None
+    memory: MemoryResult | None
     estimated_seconds: float | None
     error: str | None
 
@@ -469,3 +482,110 @@ def run_cell(  # noqa: PLR0913
 def _infer_depth(workload: Workload) -> int:
     depth = workload.params.get("depth", 0)
     return int(depth) if isinstance(depth, (int, float)) else 0
+
+
+def _rss_peak_bytes() -> int:
+    ru_maxrss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # ru_maxrss is bytes on macOS (Darwin) but kilobytes on Linux -- see `man
+    # getrusage` on each platform. platform.system(), not sys.platform, for the
+    # same reason as _cpu_brand: avoids mypy treating the non-matching branch as
+    # statically unreachable based on the platform it happens to run mypy on.
+    return ru_maxrss if platform.system() == "Darwin" else ru_maxrss * 1024
+
+
+def run_memory_cell(workload: Workload, impl: Impl, *, repro_command: str) -> CellResult:
+    """Measure peak and steady-state memory for one (workload, implementation) cell.
+
+    Always its own process invocation in practice (``run_bench.py --mode memory``
+    never runs alongside a latency run): ``tracemalloc`` costs roughly 2-5x and its
+    own bookkeeping allocations would change a latency run's GC behavior if the two
+    ran in the same process.
+
+    Three numbers, not one: ``book_bytes_after_setup`` (and the derived
+    ``bytes_per_resting_order``) isolates what it costs to hold ``depth`` resting
+    orders -- the honest counterweight to a fast implementation's speed, since e.g.
+    ``ArrayBook`` pays for its pre-allocated arrays regardless of how many orders
+    are actually resting. ``peak_bytes`` is the spec's "peak memory".
+    ``current_bytes_end`` shows whether the workload drifts (a workload that's
+    supposed to net to roughly zero book growth should end near where it started).
+    ``rss_peak_bytes`` (via ``resource.getrusage``, not tracemalloc) is a coarse,
+    independent second opinion -- tracemalloc only counts Python-level allocations
+    made through CPython's allocator while it's enabled, not the interpreter
+    baseline or any C-level allocation.
+    """
+    cell_key = (
+        f"{workload.name}/{impl.name}/d{_infer_depth(workload)}/n{len(workload.measured)}/mem"
+    )
+    engine = MatchingEngine(book=impl.factory(max_tick=workload.max_tick))
+
+    # tracemalloc must be started *before* setup runs, not after: it only counts
+    # allocations made while it is enabled, so starting it after setup (as an
+    # earlier version of this function did) silently measured zero setup memory.
+    gc.collect()
+    tracemalloc.start(1)
+    setup_outcome = replay_untimed(engine, workload.setup)
+    book_bytes_after_setup = tracemalloc.get_traced_memory()[0]
+
+    if setup_outcome.trades or setup_outcome.rejects:
+        tracemalloc.stop()
+        return CellResult(
+            cell_key=cell_key,
+            status="error",
+            workload=workload.name,
+            workload_params=workload.params,
+            impl=impl.name,
+            impl_description=impl.description,
+            repeats=0,
+            repro_command=repro_command,
+            setup={"commands": len(workload.setup), "trades": setup_outcome.trades},
+            measured=None,
+            throughput=None,
+            latency_ns=None,
+            per_repeat=[],
+            memory=None,
+            estimated_seconds=None,
+            error="setup produced trades or rejects; workload is not clean",
+        )
+
+    tracemalloc.reset_peak()
+    measured_outcome = replay_untimed(engine, workload.measured)
+
+    current_bytes_end, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    depth = _infer_depth(workload)
+    bytes_per_order = book_bytes_after_setup / depth if depth else 0.0
+
+    memory = MemoryResult(
+        tracemalloc_frames=1,
+        book_bytes_after_setup=book_bytes_after_setup,
+        bytes_per_resting_order=bytes_per_order,
+        peak_bytes=peak_bytes,
+        current_bytes_end=current_bytes_end,
+        rss_peak_bytes=_rss_peak_bytes(),
+    )
+
+    return CellResult(
+        cell_key=cell_key,
+        status="ok",
+        workload=workload.name,
+        workload_params=workload.params,
+        impl=impl.name,
+        impl_description=impl.description,
+        repeats=1,
+        repro_command=repro_command,
+        setup={"commands": len(workload.setup)},
+        measured={
+            "commands": len(workload.measured),
+            "events": measured_outcome.events,
+            "trades": measured_outcome.trades,
+            "rejects": measured_outcome.rejects,
+            "cancel_rejects": measured_outcome.cancel_rejects,
+        },
+        throughput=None,
+        latency_ns=None,
+        per_repeat=[],
+        memory=memory,
+        estimated_seconds=None,
+        error=None,
+    )

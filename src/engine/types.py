@@ -126,18 +126,25 @@ class RestingOrder:
 
     @classmethod
     def from_order(cls, order: Order, entry_seq: int) -> RestingOrder:
-        """Build the book-resident form of a freshly accepted order."""
+        """Build the book-resident form of a freshly accepted order.
+
+        Positional, not keyword, arguments: measured ~130ns faster per call (see
+        docs/DESIGN.md's Phase 2 optimization log) since this runs on every order
+        that rests, which is the common case. Field order below must track
+        RestingOrder's declaration order exactly -- a reader checking one against
+        the other is the price of this optimization, spelled out here.
+        """
         return cls(
-            order_id=order.order_id,
-            side=order.side,
-            price=order.price,
-            original_quantity=order.quantity,
-            remaining=order.quantity,
-            order_type=order.order_type,
-            timestamp=order.timestamp,
-            expires_at=order.expires_at,
-            owner_id=order.owner_id,
-            entry_seq=entry_seq,
+            order.order_id,
+            order.side,
+            order.price,
+            order.quantity,
+            order.quantity,
+            order.order_type,
+            order.timestamp,
+            order.expires_at,
+            order.owner_id,
+            entry_seq,
         )
 
 

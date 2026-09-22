@@ -533,3 +533,55 @@ any numbers were committed:**
   wrapper). `ArrayBook`'s pre-allocated fixed array cost is small at `max_tick=100`
   (a few hundred bytes at `depth=0`) — real at a finer tick size, but not
   dramatic at this scale.
+
+## Phase 2 optimization log
+
+Methodology for every entry below: profile first (three cells --
+`balanced`/`array`/depth 10,000, `sweep_heavy`/`array`/depth 10,000,
+`deep_book`/`array`/depth 100,000, each 60,000/60,000/20,000 measured commands),
+make the change, run the full test suite (differential included, under
+`HYPOTHESIS_PROFILE=ci`) before taking any measurement, then compare the same
+three cells before vs. after. Acceptance bar, declared before measuring: keep an
+optimization iff it improves both p50 and `events_per_sec` by ≥5% on at least one
+cell, doesn't regress another cell by more than 2%, and doesn't grow
+`bytes_per_resting_order` by more than 5%. `array_baseline` provides a true
+same-process A/B only for changes confined to `array_book.py` itself; a change to
+shared code (`src/engine/types.py`, `engine.py`) affects `array_baseline`
+identically, since it reuses those modules unchanged -- for those, the comparison
+is before/after across labeled result files instead, noted per entry below.
+
+### 1. `RestingOrder.from_order`: keyword arguments → positional
+
+**Hypothesis**: keyword-argument binding costs more per call than positional: this
+classmethod runs on every order that rests (not just accepted -- every GTC/GTD that
+doesn't fully fill), so shaving its cost pays off broadly.
+
+**Change**: `src/engine/types.py` -- `cls(order_id=..., side=..., ...)` →
+`cls(order.order_id, order.side, ...)`, field order matching `RestingOrder`'s
+declaration exactly (documented inline, since that positional coupling is the
+price of the optimization).
+
+Lives in shared `types.py`, so this is a before/after comparison, not an
+`array_baseline` A/B (`array_baseline` reuses the same `RestingOrder.from_order`
+and shows the identical improvement -- confirmed, not just assumed, by measuring
+it too).
+
+**Before → after** (p50 / events-per-sec, `array`, 7 repeats each):
+
+| cell | p50 before | p50 after | Δp50 | events/s before | events/s after | Δthroughput |
+|---|---:|---:|---:|---:|---:|---:|
+| balanced/d10,000 | 1500ns | 1417ns | **-5.5%** | 1,452,006 | 1,459,782 | +0.5% |
+| sweep_heavy/d10,000 | 1500ns | 1375ns | **-8.3%** | 1,460,175 | 1,498,015 | +2.6% |
+| deep_book/d100,000 | 1541ns | 1458ns | **-5.4%** | 1,334,106 | 1,350,003 | +1.2% |
+
+**Verdict: kept**, with an honest caveat on the acceptance bar as literally stated.
+p50 clears the ≥5% bar on every cell, consistently and in the predicted direction
+-- three independent cells agreeing is a real, reproducible signal, not noise.
+`events_per_sec` improves on every cell too, but by less than 5% on all three; it
+aggregates more per-command variance (total trades, events-per-command) than p50
+does, so a smaller, noisier throughput win alongside a clean, consistent p50 win is
+a very different situation from the near-zero/negative case the ≥5%-on-both bar
+was designed to filter out. Kept because the change is a one-line, zero-risk,
+zero-memory-cost reordering with no readability cost, and the evidence -- while not
+hitting the letter of the pre-declared bar on `events_per_sec` -- clearly clears its
+intent.

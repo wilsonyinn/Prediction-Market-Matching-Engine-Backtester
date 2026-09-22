@@ -1,0 +1,1168 @@
+{
+  "schema_version": 1,
+  "run_id": "20260922T195209Z-6cd6d58-memory",
+  "label": "optimized",
+  "mode": "memory",
+  "started_at_utc": "20260922T195209Z",
+  "environment": {
+    "python_version": "3.13.2",
+    "python_implementation": "CPython",
+    "os": "Darwin",
+    "os_release": "25.6.0",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_brand": "Apple M5",
+    "cpu_count_logical": 10,
+    "git_commit": "6cd6d589f93d039a6587921e313dfde4fad2f13c",
+    "git_dirty": false,
+    "timer": {
+      "name": "perf_counter_ns",
+      "resolution_ns": 41.666666666666664,
+      "overhead_ns_median": 42,
+      "overhead_ns_p99": 83
+    }
+  },
+  "methodology": {
+    "latency_unit": "ns_per_engine_call",
+    "percentile_method": "nearest_rank",
+    "aggregation_across_repeats": "median_of_per_repeat_percentiles",
+    "warmup_events": 5000,
+    "gc_mode": "frozen",
+    "setup_method": "deepcopy_per_repeat"
+  },
+  "results": [
+    {
+      "cell_key": "balanced/array/d0/n100000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 0,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl array --depth 0 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 0
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 288329,
+        "trades": 66052,
+        "rejects": 0,
+        "cancel_rejects": 5370
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 400,
+        "bytes_per_resting_order": 0.0,
+        "peak_bytes": 2888744,
+        "current_bytes_end": 1929304,
+        "rss_peak_bytes": 45203456
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/array_baseline/d0/n100000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 0,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "array_baseline",
+      "impl_description": "frozen Phase 1 ArrayBook, kept for before/after comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl array_baseline --depth 0 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 0
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 288329,
+        "trades": 66052,
+        "rejects": 0,
+        "cancel_rejects": 5370
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 312,
+        "bytes_per_resting_order": 0.0,
+        "peak_bytes": 2894440,
+        "current_bytes_end": 1935848,
+        "rss_peak_bytes": 66830336
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/naive/d0/n100000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 0,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "naive",
+      "impl_description": "one flat list per side, O(n) reference implementation",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl naive --depth 0 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 0
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 288329,
+        "trades": 66052,
+        "rejects": 0,
+        "cancel_rejects": 5370
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 296,
+        "bytes_per_resting_order": 0.0,
+        "peak_bytes": 2888576,
+        "current_bytes_end": 1929232,
+        "rss_peak_bytes": 68878336
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/tree/d0/n100000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 0,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "tree",
+      "impl_description": "sorted-map (SortedDict) per side, general-exchange comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl tree --depth 0 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 0
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 288329,
+        "trades": 66052,
+        "rejects": 0,
+        "cancel_rejects": 5370
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 272,
+        "bytes_per_resting_order": 0.0,
+        "peak_bytes": 2892272,
+        "current_bytes_end": 1934512,
+        "rss_peak_bytes": 70057984
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/array/d1000/n100000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 1000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl array --depth 1000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 1000
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 290140,
+        "trades": 66940,
+        "rejects": 0,
+        "cancel_rejects": 5254
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 205216,
+        "bytes_per_resting_order": 205.216,
+        "peak_bytes": 2897408,
+        "current_bytes_end": 1930152,
+        "rss_peak_bytes": 72253440
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/array_baseline/d1000/n100000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 1000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "array_baseline",
+      "impl_description": "frozen Phase 1 ArrayBook, kept for before/after comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl array_baseline --depth 1000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 1000
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 290140,
+        "trades": 66940,
+        "rejects": 0,
+        "cancel_rejects": 5254
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 282800,
+        "bytes_per_resting_order": 282.8,
+        "peak_bytes": 2904864,
+        "current_bytes_end": 1936696,
+        "rss_peak_bytes": 73646080
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/naive/d1000/n100000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 1000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "naive",
+      "impl_description": "one flat list per side, O(n) reference implementation",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl naive --depth 1000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 1000
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 290140,
+        "trades": 66940,
+        "rejects": 0,
+        "cancel_rejects": 5254
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 186968,
+        "bytes_per_resting_order": 186.968,
+        "peak_bytes": 2895072,
+        "current_bytes_end": 1930024,
+        "rss_peak_bytes": 75776000
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/tree/d1000/n100000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 1000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "tree",
+      "impl_description": "sorted-map (SortedDict) per side, general-exchange comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl tree --depth 1000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 1000
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 290140,
+        "trades": 66940,
+        "rejects": 0,
+        "cancel_rejects": 5254
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 285048,
+        "bytes_per_resting_order": 285.048,
+        "peak_bytes": 2905344,
+        "current_bytes_end": 1935360,
+        "rss_peak_bytes": 75890688
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/array/d10000/n50000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 50000,
+        "depth": 10000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl array --depth 10000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 50000,
+        "events": 162393,
+        "trades": 42055,
+        "rejects": 0,
+        "cancel_rejects": 1741
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 2008760,
+        "bytes_per_resting_order": 200.876,
+        "peak_bytes": 2926744,
+        "current_bytes_end": 1958008,
+        "rss_peak_bytes": 75890688
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/array_baseline/d10000/n50000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 50000,
+        "depth": 10000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "array_baseline",
+      "impl_description": "frozen Phase 1 ArrayBook, kept for before/after comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl array_baseline --depth 10000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 50000,
+        "events": 162393,
+        "trades": 42055,
+        "rejects": 0,
+        "cancel_rejects": 1741
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 2795624,
+        "bytes_per_resting_order": 279.5624,
+        "peak_bytes": 3263856,
+        "current_bytes_end": 1965816,
+        "rss_peak_bytes": 75890688
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/naive/d10000/n50000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 50000,
+        "depth": 10000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "naive",
+      "impl_description": "one flat list per side, O(n) reference implementation",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl naive --depth 10000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 50000,
+        "events": 162393,
+        "trades": 42055,
+        "rejects": 0,
+        "cancel_rejects": 1741
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 1883808,
+        "bytes_per_resting_order": 188.3808,
+        "peak_bytes": 2924472,
+        "current_bytes_end": 1957880,
+        "rss_peak_bytes": 75890688
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/tree/d10000/n50000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 50000,
+        "depth": 10000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "tree",
+      "impl_description": "sorted-map (SortedDict) per side, general-exchange comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl tree --depth 10000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 50000,
+        "events": 162393,
+        "trades": 42055,
+        "rejects": 0,
+        "cancel_rejects": 1741
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 2797872,
+        "bytes_per_resting_order": 279.7872,
+        "peak_bytes": 3266152,
+        "current_bytes_end": 1962728,
+        "rss_peak_bytes": 75890688
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/array/d100000/n20000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 20000,
+        "depth": 100000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl array --depth 100000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 100000
+      },
+      "measured": {
+        "commands": 20000,
+        "events": 76692,
+        "trades": 22602,
+        "rejects": 0,
+        "cancel_rejects": 0
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 23683184,
+        "bytes_per_resting_order": 236.83184,
+        "peak_bytes": 23684176,
+        "current_bytes_end": 22105848,
+        "rss_peak_bytes": 101220352
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/array_baseline/d100000/n20000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 20000,
+        "depth": 100000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "array_baseline",
+      "impl_description": "frozen Phase 1 ArrayBook, kept for before/after comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl array_baseline --depth 100000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 100000
+      },
+      "measured": {
+        "commands": 20000,
+        "events": 76692,
+        "trades": 22602,
+        "rejects": 0,
+        "cancel_rejects": 0
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 30609160,
+        "bytes_per_resting_order": 306.0916,
+        "peak_bytes": 31015584,
+        "current_bytes_end": 30898112,
+        "rss_peak_bytes": 124698624
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "balanced/naive/d100000/n20000/t100",
+      "status": "excluded",
+      "workload": "balanced",
+      "workload_params": {
+        "depth": 100000,
+        "n_events": 20000,
+        "max_tick": 100
+      },
+      "impl": "naive",
+      "impl_description": "one flat list per side, O(n) reference implementation",
+      "repeats": 0,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl naive --depth 100000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 0
+      },
+      "measured": null,
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": null,
+      "estimated_seconds": 76.6,
+      "error": "excluded from the default matrix (slow); pass --include-slow to run it"
+    },
+    {
+      "cell_key": "balanced/tree/d100000/n20000/t100/mem",
+      "status": "ok",
+      "workload": "balanced",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 20000,
+        "depth": 100000,
+        "max_tick": 100,
+        "passive_frac": 0.55,
+        "cancel_frac": 0.25,
+        "marketable_frac": 0.2,
+        "fok_frac": 0.05,
+        "fak_frac": 0.05
+      },
+      "impl": "tree",
+      "impl_description": "sorted-map (SortedDict) per side, general-exchange comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload balanced --impl tree --depth 100000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 100000
+      },
+      "measured": {
+        "commands": 20000,
+        "events": 76692,
+        "trades": 22602,
+        "rejects": 0,
+        "cancel_rejects": 0
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 30611448,
+        "bytes_per_resting_order": 306.11448,
+        "peak_bytes": 31017920,
+        "current_bytes_end": 30900448,
+        "rss_peak_bytes": 148373504
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/array/d1000/n100000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 1000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl array --depth 1000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 1000
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 350925,
+        "trades": 98143,
+        "rejects": 0,
+        "cancel_rejects": 84
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 205064,
+        "bytes_per_resting_order": 205.064,
+        "peak_bytes": 5862848,
+        "current_bytes_end": 3919832,
+        "rss_peak_bytes": 148373504
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/array_baseline/d1000/n100000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 1000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "array_baseline",
+      "impl_description": "frozen Phase 1 ArrayBook, kept for before/after comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl array_baseline --depth 1000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 1000
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 350925,
+        "trades": 98143,
+        "rejects": 0,
+        "cancel_rejects": 84
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 282664,
+        "bytes_per_resting_order": 282.664,
+        "peak_bytes": 5945264,
+        "current_bytes_end": 3997704,
+        "rss_peak_bytes": 148373504
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/naive/d1000/n100000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 1000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "naive",
+      "impl_description": "one flat list per side, O(n) reference implementation",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl naive --depth 1000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 1000
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 350925,
+        "trades": 98143,
+        "rejects": 0,
+        "cancel_rejects": 84
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 186848,
+        "bytes_per_resting_order": 186.848,
+        "peak_bytes": 5840680,
+        "current_bytes_end": 3909936,
+        "rss_peak_bytes": 148373504
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/tree/d1000/n100000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 100000,
+        "depth": 1000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "tree",
+      "impl_description": "sorted-map (SortedDict) per side, general-exchange comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl tree --depth 1000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 1000
+      },
+      "measured": {
+        "commands": 100000,
+        "events": 350925,
+        "trades": 98143,
+        "rejects": 0,
+        "cancel_rejects": 84
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 284952,
+        "bytes_per_resting_order": 284.952,
+        "peak_bytes": 5901328,
+        "current_bytes_end": 3954960,
+        "rss_peak_bytes": 148373504
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/array/d10000/n50000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 50000,
+        "depth": 10000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl array --depth 10000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 50000,
+        "events": 180698,
+        "trades": 52324,
+        "rejects": 0,
+        "cancel_rejects": 959
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 2008680,
+        "bytes_per_resting_order": 200.868,
+        "peak_bytes": 3052080,
+        "current_bytes_end": 2079016,
+        "rss_peak_bytes": 148373504
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/array_baseline/d10000/n50000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 50000,
+        "depth": 10000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "array_baseline",
+      "impl_description": "frozen Phase 1 ArrayBook, kept for before/after comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl array_baseline --depth 10000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 50000,
+        "events": 180698,
+        "trades": 52324,
+        "rejects": 0,
+        "cancel_rejects": 959
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 2795560,
+        "bytes_per_resting_order": 279.556,
+        "peak_bytes": 3481936,
+        "current_bytes_end": 2504968,
+        "rss_peak_bytes": 148373504
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/naive/d10000/n50000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 50000,
+        "depth": 10000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "naive",
+      "impl_description": "one flat list per side, O(n) reference implementation",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl naive --depth 10000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 50000,
+        "events": 180698,
+        "trades": 52324,
+        "rejects": 0,
+        "cancel_rejects": 959
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 1883760,
+        "bytes_per_resting_order": 188.376,
+        "peak_bytes": 3006600,
+        "current_bytes_end": 2036384,
+        "rss_peak_bytes": 148373504
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/tree/d10000/n50000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 50000,
+        "depth": 10000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "tree",
+      "impl_description": "sorted-map (SortedDict) per side, general-exchange comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl tree --depth 10000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 10000
+      },
+      "measured": {
+        "commands": 50000,
+        "events": 180698,
+        "trades": 52324,
+        "rejects": 0,
+        "cancel_rejects": 959
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 2797848,
+        "bytes_per_resting_order": 279.7848,
+        "peak_bytes": 3152360,
+        "current_bytes_end": 2188648,
+        "rss_peak_bytes": 148373504
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/array/d100000/n20000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 20000,
+        "depth": 100000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl array --depth 100000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 100000
+      },
+      "measured": {
+        "commands": 20000,
+        "events": 61952,
+        "trades": 16792,
+        "rejects": 0,
+        "cancel_rejects": 490
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 23683176,
+        "bytes_per_resting_order": 236.83176,
+        "peak_bytes": 23684072,
+        "current_bytes_end": 21654872,
+        "rss_peak_bytes": 151715840
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/array_baseline/d100000/n20000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 20000,
+        "depth": 100000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "array_baseline",
+      "impl_description": "frozen Phase 1 ArrayBook, kept for before/after comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl array_baseline --depth 100000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 100000
+      },
+      "measured": {
+        "commands": 20000,
+        "events": 61952,
+        "trades": 16792,
+        "rejects": 0,
+        "cancel_rejects": 490
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 30609160,
+        "bytes_per_resting_order": 306.0916,
+        "peak_bytes": 30609928,
+        "current_bytes_end": 28851816,
+        "rss_peak_bytes": 187351040
+      },
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "deep_book/naive/d100000/n20000/t100",
+      "status": "excluded",
+      "workload": "deep_book",
+      "workload_params": {
+        "depth": 100000,
+        "n_events": 20000,
+        "max_tick": 100
+      },
+      "impl": "naive",
+      "impl_description": "one flat list per side, O(n) reference implementation",
+      "repeats": 0,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl naive --depth 100000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 0
+      },
+      "measured": null,
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": null,
+      "estimated_seconds": 76.6,
+      "error": "excluded from the default matrix (slow); pass --include-slow to run it"
+    },
+    {
+      "cell_key": "deep_book/tree/d100000/n20000/t100/mem",
+      "status": "ok",
+      "workload": "deep_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 20000,
+        "depth": 100000,
+        "max_tick": 100,
+        "cancel_frac": 0.4,
+        "marketable_frac": 0.2
+      },
+      "impl": "tree",
+      "impl_description": "sorted-map (SortedDict) per side, general-exchange comparison",
+      "repeats": 1,
+      "repro_command": "python -m bench.run_bench --workload deep_book --impl tree --depth 100000 --seed 1 --max-tick 100 --repeats 5 --mode memory",
+      "setup": {
+        "commands": 100000
+      },
+      "measured": {
+        "commands": 20000,
+        "events": 61952,
+        "trades": 16792,
+        "rejects": 0,
+        "cancel_rejects": 490
+      },
+      "throughput": null,
+      "latency_ns": null,
+      "per_repeat": [],
+      "memory": {
+        "tracemalloc_frames": 1,
+        "book_bytes_after_setup": 30611448,
+        "bytes_per_resting_order": 306.11448,
+        "peak_bytes": 30612216,
+        "current_bytes_end": 28854104,
+        "rss_peak_bytes": 187351040
+      },
+      "estimated_seconds": null,
+      "error": null
+    }
+  ]
+}

@@ -45,3 +45,42 @@ jobs:
         with:
           name: coverage-${{ matrix.python-version }}
           path: coverage.xml
+
+  # Separate from `check`, deliberately: this exercises the bench harness's
+  # plumbing (workload generation, the CLI, the report generator), never asserts
+  # on a timing number. A shared runner's variance is measured in multiples, so a
+  # latency gate here would be a flake generator, not a signal -- see
+  # docs/DESIGN.md. A bench-smoke failure means the harness itself broke (e.g. a
+  # renamed engine method, an out-of-sync workload generator), which is a
+  # different, more useful signal than a `check` failure.
+  bench-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - run: python -m pip install -e ".[dev]"
+
+      - name: Run the full matrix at smoke-test sizes (plumbing only, not real numbers)
+        run: |
+          python -m bench.run_bench --workload balanced --workload deep_book \
+            --workload sweep_heavy --impl all --depth 0 --depth 200 --events 500 \
+            --repeats 1 --warmup 0 --min-samples 10 --label ci-smoke \
+            --out /tmp/bench-smoke --quiet
+          python -m bench.run_bench --workload sparse_book --impl all \
+            --depth 50 --max-tick 1000 --events 500 \
+            --repeats 1 --warmup 0 --min-samples 10 --label ci-smoke \
+            --out /tmp/bench-smoke --quiet
+          python -m bench.run_bench --mode memory --workload balanced \
+            --workload deep_book --impl all --depth 200 --events 200 \
+            --label ci-smoke --out /tmp/bench-smoke --quiet
+
+      - name: Regenerate results/RESULTS.md from committed data and diff
+        run: |
+          python -m bench.report --results results --out /tmp/regenerated-RESULTS.md
+          diff results/RESULTS.md /tmp/regenerated-RESULTS.md

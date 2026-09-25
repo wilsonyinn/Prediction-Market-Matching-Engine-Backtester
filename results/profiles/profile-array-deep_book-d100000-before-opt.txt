@@ -1,0 +1,28 @@
+         607519 function calls in 0.103 seconds
+
+   Ordered by: internal time
+   List reduced from 29 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    11983    0.023    0.000    0.059    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:303(_match)
+    11983    0.011    0.000    0.101    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:86(submit)
+    11983    0.007    0.000    0.010    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:223(_validate)
+    20704    0.006    0.000    0.010    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:76(remove)
+    16792    0.006    0.000    0.010    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:95(front)
+     8017    0.005    0.000    0.015    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:124(cancel)
+    20000    0.005    0.000    0.121    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/bench/harness.py:181(_apply)
+     8009    0.005    0.000    0.015    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:292(_rest)
+    99915    0.004    0.000    0.004    0.000 {built-in method builtins.isinstance}
+     8009    0.004    0.000    0.005    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:66(add)
+    61952    0.004    0.000    0.004    0.000 {method 'append' of 'list' objects}
+    61952    0.003    0.000    0.003    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:187(_seq)
+    49120    0.003    0.000    0.003    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:126(_arrays_for)
+    20704    0.003    0.000    0.003    0.000 {method 'pop' of 'dict' objects}
+     8009    0.003    0.000    0.003    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/types.py:127(from_order)
+    24801    0.002    0.000    0.002    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:90(best)
+    16792    0.002    0.000    0.002    0.000 {built-in method builtins.next}
+    24801    0.002    0.000    0.002    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:258(_crosses)
+    20849    0.001    0.000    0.001    0.000 {built-in method builtins.min}
+    16792    0.001    0.000    0.001    0.000 {method 'values' of 'collections.OrderedDict' objects}
+
+

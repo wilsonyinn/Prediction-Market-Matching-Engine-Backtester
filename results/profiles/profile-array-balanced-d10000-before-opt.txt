@@ -1,0 +1,28 @@
+         1966782 function calls in 0.313 seconds
+
+   Ordered by: internal time
+   List reduced from 38 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    48763    0.065    0.000    0.171    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:303(_match)
+    49048    0.044    0.000    0.335    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:86(submit)
+    49048    0.026    0.000    0.039    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:223(_validate)
+    32268    0.018    0.000    0.055    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:292(_rest)
+    48741    0.017    0.000    0.027    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:95(front)
+   365240    0.014    0.000    0.014    0.000 {built-in method builtins.isinstance}
+    42250    0.012    0.000    0.024    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:76(remove)
+    60000    0.012    0.000    0.367    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/bench/harness.py:181(_apply)
+   191360    0.010    0.000    0.010    0.000 {method 'append' of 'list' objects}
+    32268    0.010    0.000    0.012    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/types.py:127(from_order)
+    32268    0.009    0.000    0.013    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:66(add)
+   191360    0.009    0.000    0.009    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:187(_seq)
+   139271    0.008    0.000    0.008    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:126(_arrays_for)
+    10952    0.008    0.000    0.018    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:124(cancel)
+    14087    0.006    0.000    0.006    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:131(_advance_best_past)
+    81283    0.006    0.000    0.006    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/array_book.py:90(best)
+    69589    0.004    0.000    0.004    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:258(_crosses)
+    66608    0.004    0.000    0.004    0.000 {built-in method builtins.min}
+    60000    0.004    0.000    0.004    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/engine.py:192(_advance_and_sweep)
+    49605    0.003    0.000    0.003    0.000 /Users/wilson/github/Prediction-Market Matching Engine & Backtester/src/engine/types.py:20(opposite)
+
+

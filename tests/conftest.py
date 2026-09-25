@@ -15,6 +15,7 @@ import pytest
 from hypothesis import HealthCheck, settings
 
 from engine.array_book import ArrayBook
+from engine.array_book_baseline import ArrayBookBaseline
 from engine.book import OrderBook
 from engine.engine import MatchingEngine
 from engine.naive_book import NaiveBook
@@ -22,7 +23,15 @@ from engine.naive_book import NaiveBook
 BOOK_FACTORIES: dict[str, Callable[..., OrderBook]] = {
     "naive": lambda max_tick=100: NaiveBook(max_tick=max_tick),
     "array": lambda max_tick=100: ArrayBook(max_tick=max_tick),
+    "array_baseline": lambda max_tick=100: ArrayBookBaseline(max_tick=max_tick),
 }
+
+try:
+    from engine.tree_book import TreeBook
+except ImportError:
+    pass
+else:
+    BOOK_FACTORIES["tree"] = lambda max_tick=100: TreeBook(max_tick=max_tick)
 
 
 @pytest.fixture(params=sorted(BOOK_FACTORIES), ids=sorted(BOOK_FACTORIES))

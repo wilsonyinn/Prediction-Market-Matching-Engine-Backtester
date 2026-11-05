@@ -1,15 +1,22 @@
-"""Differential test: NaiveBook and ArrayBook must behave identically.
+"""Differential test: every book implementation must behave identically to NaiveBook.
 
-This is the strongest single correctness signal for ``ArrayBook`` -- ``NaiveBook`` is
-the obviously-correct reference. It drives both engines through the same commands in
-lockstep, one command at a time, and asserts identical events *and* identical
-``snapshot()`` / ``best_bid()`` / ``best_ask()`` after each one. Checking book state
-too (not just the event stream) catches internal ordering drift at the exact command
-where it happened, rather than an arbitrary number of events later. Lockstep
-execution (rather than running each engine through the whole command list separately
-and comparing at the end, which ``tests.property.strategies.run_commands`` would make
-easy) is what makes that localization possible, so this test steps the two engines
-itself instead of reusing that helper's internal loop.
+``NaiveBook`` is the obviously-correct reference; every other registered
+implementation (``array``, ``array_baseline``, ``tree`` when installed) is driven
+alongside it in lockstep, one command at a time, and checked for identical events
+*and* identical ``snapshot()`` / ``best_bid()`` / ``best_ask()`` after each one.
+Checking book state too (not just the event stream) catches internal ordering drift
+at the exact command where it happened, rather than an arbitrary number of events
+later. Lockstep execution (rather than running each engine through the whole command
+list separately and comparing at the end, which
+``tests.property.strategies.run_commands`` would make easy) is what makes that
+localization possible, so this test steps every engine itself instead of reusing
+that helper's internal loop.
+
+The set of implementations compared is read from ``tests.conftest.BOOK_FACTORIES``
+rather than hard-coded, so it automatically covers ``tree`` when the optional
+``sortedcontainers`` extra is installed and simply omits it otherwise -- and so a
+future fifth implementation is covered by construction, not by remembering to add it
+here.
 
 The example count is derived from the active Hypothesis profile rather than
 hard-coded: a fixed ``max_examples=2000`` would silently override the fast ``dev``
@@ -31,15 +38,22 @@ from tests.property.strategies import CancelCmd, SubmitCmd, command_lists
 
 _active_profile = settings.get_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 # Differential testing is the highest-value correctness check here, so it gets a
-# multiplier over whatever the active profile otherwise provides.
+# multiplier over whatever the active profile otherwise provides. Runtime scales
+# with the number of non-reference implementations (one extra engine driven per
+# command per implementation), not with this multiplier alone -- if CI time becomes
+# a problem, reduce this multiplier before dropping an implementation from the
+# comparison.
 DIFF_EXAMPLES = _active_profile.max_examples * 2
+
+_REFERENCE_NAME = "naive"
+_OTHER_NAMES = sorted(name for name in BOOK_FACTORIES if name != _REFERENCE_NAME)
 
 
 @settings(max_examples=DIFF_EXAMPLES, deadline=None)
 @given(commands=command_lists)
-def test_naive_and_array_book_agree(commands) -> None:
-    naive = MatchingEngine(book=BOOK_FACTORIES["naive"]())
-    array = MatchingEngine(book=BOOK_FACTORIES["array"]())
+def test_every_book_agrees_with_naive(commands) -> None:
+    reference = MatchingEngine(book=BOOK_FACTORIES[_REFERENCE_NAME]())
+    others = {name: MatchingEngine(book=BOOK_FACTORIES[name]()) for name in _OTHER_NAMES}
 
     clock = 0
     submitted_ids: list[str] = []
@@ -58,23 +72,34 @@ def test_naive_and_array_book_agree(commands) -> None:
                 expires_at=expires_at,
             )
             submitted_ids.append(order.order_id)
-            events_naive = naive.submit(order)
-            events_array = array.submit(order)
+            reference_events = reference.submit(order)
+            other_events = {name: engine.submit(order) for name, engine in others.items()}
         elif isinstance(cmd, CancelCmd):
             target_id = (
                 submitted_ids[cmd.target % len(submitted_ids)]
                 if submitted_ids
                 else "never-submitted"
             )
-            events_naive = naive.cancel(target_id, timestamp=clock)
-            events_array = array.cancel(target_id, timestamp=clock)
+            reference_events = reference.cancel(target_id, timestamp=clock)
+            other_events = {
+                name: engine.cancel(target_id, timestamp=clock) for name, engine in others.items()
+            }
         else:
-            events_naive = naive.advance_time(clock)
-            events_array = array.advance_time(clock)
+            reference_events = reference.advance_time(clock)
+            other_events = {name: engine.advance_time(clock) for name, engine in others.items()}
 
-        assert events_naive == events_array, (
-            f"command #{i} ({cmd}) diverged: naive={events_naive} array={events_array}"
-        )
-        assert naive.snapshot() == array.snapshot(), f"snapshot diverged after command #{i}"
-        assert naive.best_bid() == array.best_bid(), f"best_bid diverged after command #{i}"
-        assert naive.best_ask() == array.best_ask(), f"best_ask diverged after command #{i}"
+        for name, events in other_events.items():
+            assert reference_events == events, (
+                f"command #{i} ({cmd}) diverged: {_REFERENCE_NAME}={reference_events} "
+                f"{name}={events}"
+            )
+            engine = others[name]
+            assert reference.snapshot() == engine.snapshot(), (
+                f"{name} snapshot diverged after command #{i}"
+            )
+            assert reference.best_bid() == engine.best_bid(), (
+                f"{name} best_bid diverged after command #{i}"
+            )
+            assert reference.best_ask() == engine.best_ask(), (
+                f"{name} best_ask diverged after command #{i}"
+            )

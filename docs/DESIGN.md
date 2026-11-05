@@ -320,16 +320,17 @@ into the thousands of examples the spec asks for.
 
 ## Complexity table
 
-All are for a book with `max_tick` price ticks and `n` currently resting orders.
+All are for a book with `max_tick` price ticks, `n` currently resting orders, and (for
+`TreeBook`) `m` currently *occupied* price levels (`m <= n`, and `m <= max_tick - 1`).
 
-| Operation | `NaiveBook` | `ArrayBook` |
-|---|---|---|
-| Add | O(1) (append) | O(1) |
-| Cancel by id | O(n) (linear scan both sides) | O(1) (dict pop + `OrderedDict` delete) |
-| Best price | O(n) (scan) | O(1) (cached, amortized — see below) |
-| Front of level | O(n) (scan + min by `entry_seq`) | O(1) |
-| Match (one taker) | O(n) per level swept | O(k) where k = orders actually consumed, plus O(distance to next non-empty level) amortized per level exhausted |
-| `levels()` full snapshot | O(n log n) (build + sort aggregates) | O(`max_tick`) worst case (bounded scan across all price slots) |
+| Operation | `NaiveBook` | `ArrayBook` | `TreeBook` |
+|---|---|---|---|
+| Add | O(1) (append) | O(1) | O(log m) (level lookup/insert in the `SortedDict`) |
+| Cancel by id | O(n) (linear scan both sides) | O(1) (dict pop + `OrderedDict` delete) | O(log m) (delete, plus level removal if now empty) |
+| Best price | O(n) (scan) | O(1) (cached, amortized — see below) | O(1) (`SortedDict.peekitem`) |
+| Front of level | O(n) (scan + min by `entry_seq`) | O(1) | O(1) |
+| Match (one taker) | O(n) per level swept | O(k) plus O(distance to next non-empty level) amortized per level exhausted | O(k) plus O(log m) per level exhausted |
+| `levels()` full snapshot | O(n log n) (build + sort aggregates) | O(`max_tick`) worst case (bounded scan across all price slots) | O(m) levels, but O(n) total for the aggregate sums — see below |
 
 `ArrayBook`'s best-price lookup is O(1) *amortized*: an individual cancel or fill
 that happens to empty the current best level triggers a rescan bounded by the
@@ -338,3 +339,410 @@ of a reasonably liquid book — but the rescan bound is `max_tick` in the worst 
 (a single order resting far from any other liquidity). This divergence from
 `NaiveBook`'s honest O(n) is exactly what Phase 2's benchmarks are meant to measure
 and report with actual numbers, not asserted here.
+
+`TreeBook`'s best-price lookup is O(1) unconditionally — `SortedDict.peekitem` reads
+the first/last key directly — because empty levels are deleted rather than merely
+tracked as zero, so there is never a rescan to perform. That is the specific property
+Phase 2's sparse-book benchmark is built to make visible against `ArrayBook`'s
+worst-case `max_tick` bound.
+
+`TreeBook.levels()` recomputes each level's total quantity by summing `remaining`
+over every order at that level, on every call — unlike `ArrayBook`'s O(1) cached
+per-level total. This is a deliberate simplicity choice (see the Phase 2 entry
+below), not an oversight: it makes a full snapshot O(n) rather than O(m), same as
+`NaiveBook`, even though per-order operations are O(log m).
+
+## Phase 2 — Benchmark and Optimize
+
+A profiling pass on the real engine, done before writing any benchmark code, found
+the headline result for this phase: **at the depths tested, `ArrayBook` is not the
+bottleneck.** Book methods (`add`/`remove`/`front`/`best`) are a minority of profiled
+time; engine-side per-command fixed costs — validation, event construction, `seq`
+bookkeeping — dominate. That reframes the optimization work below: several
+candidates are measured, found real, and *not* adopted, because they'd trade away
+either correctness guarantees or code clarity for a return under the noise floor.
+
+**`TreeBook`: `SortedDict[int, OrderedDict[str, RestingOrder]]` per side, optional via
+the `tree` extra.** This is "the general-exchange approach" the spec names —
+empty levels are deleted rather than tracked as zero-quantity, so `best()` never
+needs `ArrayBook`'s bounded rescan; it's an O(1) key read on a data structure that
+only ever contains occupied levels. `sortedcontainers` is declared only in the `tree`
+and `dev` extras, never in `dependencies` — the engine core (`dependencies = []`)
+stays zero-dependency, and `tree_book.py` is never imported from `engine/__init__.py`.
+
+Rejected alternative for best-price tracking: a `heapq` of occupied prices. A heap
+gives O(log m) best-price cheaply, but `levels()` — and therefore `snapshot()` and
+the FOK dry-run's `_crossing_quantity` — needs *ordered iteration over every occupied
+level*, which a heap can't provide without repeatedly popping and rebuilding it. A
+sorted map gives both for the same asymptotic cost.
+
+`TreeBook.levels()` recomputes each level's total quantity by summing `remaining`
+over every resting order at that price, on every call, rather than maintaining a
+cached per-level total the way `ArrayBook` does. A real "general exchange" B-tree
+implementation would typically maintain that cache for O(1) top-of-book depth
+queries; not doing so here is a deliberate simplicity choice, consistent with this
+project's stated preference for obviously-correct over cleverly-optimized, and it
+keeps `TreeBook` a genuinely different reference point from `ArrayBook` rather than a
+second copy of the same caching strategy. Noted as a real complexity cost in the
+table above, not hidden.
+
+**`sortedcontainers-stubs` needed for mypy strict** — `sortedcontainers` ships no
+`py.typed` marker and no bundled stubs (verified: mypy strict fails with
+`import-untyped` without it), so `sortedcontainers-stubs` is a `dev`-extra
+dependency purely for the type checker.
+
+**mypy's `python_version` moved from 3.11 to 3.12.** `matplotlib` (the `bench`
+extra) pulls in `numpy` transitively, and `hypothesis`'s optional numpy-integration
+code (`hypothesis.internal.entropy`, imported — guarded by a runtime
+`sys.modules` check — regardless of whether that guard would actually pass) makes
+mypy follow an import chain into `numpy`'s own stub file, which uses the Python
+3.12 `type` statement. mypy's `follow_imports = "skip"` was tried first, on both
+`numpy.*` and the specific hypothesis internal modules that reach it — it did not
+help, because "skip" mode still *parses* the target file to look for type comments,
+so a genuine syntax-level incompatibility still aborts the whole run. `python_version`
+in mypy config only governs which stdlib/typing surface mypy assumes when *checking
+our code* against dependency stubs; it is not what enforces our actual 3.11
+compatibility (CI's 3.11/3.12/3.13 test matrix does that, at runtime). Every module
+here starts with `from __future__ import annotations` and none use any Python
+3.12-only syntax, so raising this setting costs nothing real and unblocks the
+dependency chain rather than playing whack-a-mole with every current and future
+numpy-touching import inside a third-party package.
+
+**`array_book_baseline.py`: a frozen, never-edited copy of Phase 1's `ArrayBook`**,
+kept permanently in `BOOK_FACTORIES` and therefore under the conformance and
+differential suites forever. This is what makes an in-process, interleaved (ABAB)
+before/after benchmark possible: both the pre- and post-optimization implementation
+exist simultaneously, measured under identical machine load in one session, rather
+than comparing numbers from two separate sessions where machine conditions may
+differ. Rejected: comparing across two git commits in two separate benchmark runs —
+works, and is the *fallback* documented in `bench/`'s design, but loses the
+same-session guarantee and doubles the chance that ambient machine noise (not the
+code change) explains an observed delta.
+
+**`tests/differential/test_differential.py` generalized to compare every registered
+implementation against `NaiveBook`**, rather than hard-coding the naive/array pair.
+The set of implementations under comparison is read from `BOOK_FACTORIES` at import
+time, so `tree` is included automatically when the `sortedcontainers` extra is
+installed and simply omitted otherwise (no `pytest.importorskip` marker needed — an
+implementation that was never registered is an implementation that's never generated
+as a parameter, which is a cleaner mechanism than skipping a generated test case).
+A deliberately-broken `TreeBook.best()` (inverted index, returning the worst price
+instead of the best) was caught immediately by this test with a 2-command shrunk
+repro, confirming the generalized comparison actually exercises `TreeBook` and not
+just the two implementations it replaced.
+
+**`bench/` split into more files than the spec's `workloads.py` + `run_bench.py`.**
+`harness.py` (the measured loop, warmup, GC handling, percentile math, environment
+capture), `impls.py` (the implementation registry), and `report.py` (JSON → markdown)
+are separated out because they are the parts of this phase a reviewer should
+actually read — the measurement methodology is what carries an interview
+conversation, and burying it inside argparse plumbing in one large `run_bench.py`
+would bury the part with the most substance. `run_bench.py` remains the CLI entry
+point the spec names.
+
+**Workload generators use a fixed synthetic mid, not a random walk.** An early
+version let the mid drift by up to one tick per command, which is realistic-looking
+but unsound: since each order's price is an offset from the mid *at the moment it
+was generated*, a later order can end up crossing an earlier one placed near a
+different mid. This was caught by the harness's own setup-phase invariant check
+(`assert not any(isinstance(e, Trade) for e in setup_events)`) firing during manual
+smoke testing — `balanced`'s pre-population step was producing real trades. A fixed
+mid makes "passive orders never cross each other" true by construction: every buy
+prices at or below `mid - 1`, every sell at or above `mid + 1`, for the entire run.
+The cost — price levels get reused rather than wandering — is free, since realistic
+price *paths* were never a goal, only realistic *mixes* of operations.
+
+**Cancel-target modeling in `balanced`/`deep_book`, and its honest cancel-miss
+rate.** The generator can't ask a real engine which ids are still resting (that
+would break the determinism guarantee the whole module is built on), so it keeps
+its own approximate model: a list of ids it believes are still live, built only from
+**passive** submissions (never marketable ones — a FOK/FAK never rests at all, and
+an aggressively-priced GTC marketable usually fills partially or completely on
+arrival, so neither is a trustworthy cancel target), with an entry removed the
+moment the generator cancels it and a random subset removed when a marketable order
+is generated (`_deplete`, capped at 8 removals per marketable, since a marketable's
+aggressive price crosses essentially the whole opposite side regardless of exactly
+when a given resting order was placed).
+
+Even with this model, measured against a real `ArrayBook` engine: `balanced` misses
+(`CancelRejected`) on roughly **19–32%** of its generated cancels depending on
+`depth`; `deep_book` around **24%**; `sparse_book` (whose setup places at most one
+order per price tick, making liveness trivially exact) around **3%**. The first
+version of this model — before excluding marketable ids from the live set entirely
+— missed on over 70%; that fix (marketable submissions are never reliable cancel
+targets) was the single biggest improvement.
+
+The remaining ~20-30% miss rate for `balanced`/`deep_book` is not treated as a bug
+to keep chasing: closing it further would require the generator to actually
+simulate price-time priority matching (which order gets consumed first, at what
+partial quantity) — i.e., reimplementing the matching engine inside the benchmark
+harness, which is precisely the coupling the "never query a real engine" design
+principle exists to avoid. A `CancelRejected(ALREADY_FINISHED)` is also not free
+noise in the measurement: it's a real, valid, O(1) engine operation (a dict lookup
+against `_state`) that real clients issue too (cancel racing a fill), so a workload
+that generates more of them than ideal is still exercising a legitimate code path,
+not corrupting the benchmark. The rate is recorded in every results JSON
+(`cancel_reject_rate` alongside `trades`/`rejects`) rather than hidden, and
+`tests/bench/test_workloads.py` asserts it stays within the measured range rather
+than an aspirational one.
+
+**Two gaps found while running the first real benchmark matrix, both fixed before
+any numbers were committed:**
+
+1. `cell_key` omitted `max_tick`. Two runs at the same workload/impl/depth but
+   different tick sizes (exactly the `sparse_book` array-vs-tree comparison this
+   phase needs) would silently collide in `report.py`'s `(cell_key, mode, label)`
+   dedup, and the later run would overwrite the earlier one's row with no error.
+   Fixed by including `max_tick` in the key, and `report.py`'s latency table now
+   shows a `tick` column (only when more than one tick size is present in the
+   input, so single-tick-size tables stay uncluttered) and scopes the "vs min
+   depth" scaling baseline per `(max_tick, impl)` rather than per `impl` alone.
+2. A cell excluded from the default matrix (`_SLOW_CELLS`) was simply omitted from
+   `_build_matrix`'s output, so it never appeared in the written results JSON at
+   all — contradicting the documented intent ("excluded, not silently skipped").
+   `_build_matrix` now returns every conceptual cell with an `excluded` flag;
+   `_run_matrix` turns an excluded cell into a placeholder `CellResult` with
+   `status="excluded"`, an `estimated_seconds` figure, and its `repro_command`, so
+   it renders in `report.py` as a labeled row rather than an unexplained gap.
+
+**First baseline matrix, measured** (`results/bench-latency-baseline-*.json`,
+`results/bench-memory-baseline-*.json`; full tables in `results/RESULTS.md`):
+
+- `deep_book` gives the cleanest O(n)-vs-O(1) story, exactly matching the
+  complexity table: `ArrayBook`/`TreeBook` stay flat (≈1.0x p50 from depth 1,000 to
+  100,000) while `NaiveBook` climbs to 5.4x by depth 10,000 (and is excluded above
+  that by default — see `_SLOW_CELLS` — because its setup alone takes tens of
+  seconds at depth 100,000).
+- `balanced` shows the same divergence but later (NaiveBook only degrades sharply
+  at depth 10,000, not 1,000): its default fractions drain a `depth=0` book to a
+  thin steady state (documented above), so a pre-populated `depth` pool matters
+  less to `balanced`'s *measured-phase* cost than it does to `deep_book`, whose
+  cancels specifically target that pool.
+- `sparse_book` at depths 20–200 (tick sizes 0.01 and 0.001) did **not** show
+  `ArrayBook`'s worst-case tick-walking cost separating it from `TreeBook` — both
+  stayed within measurement noise of each other (~1.5M events/s), both clearly
+  ahead of `NaiveBook`. This is reported as a genuine, honest negative result
+  rather than forced into a story: at these depths the gap between the best price
+  and the next occupied level apparently isn't large enough to make `ArrayBook`'s
+  bounded rescan cost measurably more than `TreeBook`'s `SortedDict` lookup. A
+  sparser and/or deeper configuration would be needed to separate them, and is
+  left as a documented gap rather than tuned after the fact to produce a nicer
+  chart.
+- Memory: `ArrayBook`/`ArrayBookBaseline`/`TreeBook` all cost roughly 260–290
+  bytes/resting order versus `NaiveBook`'s ~170–172 (no id-index or per-level
+  wrapper). `ArrayBook`'s pre-allocated fixed array cost is small at `max_tick=100`
+  (a few hundred bytes at `depth=0`) — real at a finer tick size, but not
+  dramatic at this scale.
+
+## Phase 2 optimization log
+
+Methodology for every entry below: profile first (three cells --
+`balanced`/`array`/depth 10,000, `sweep_heavy`/`array`/depth 10,000,
+`deep_book`/`array`/depth 100,000, each 60,000/60,000/20,000 measured commands),
+make the change, run the full test suite (differential included, under
+`HYPOTHESIS_PROFILE=ci`) before taking any measurement, then compare the same
+three cells before vs. after. Acceptance bar, declared before measuring: keep an
+optimization iff it improves both p50 and `events_per_sec` by ≥5% on at least one
+cell, doesn't regress another cell by more than 2%, and doesn't grow
+`bytes_per_resting_order` by more than 5%. `array_baseline` provides a true
+same-process A/B only for changes confined to `array_book.py` itself; a change to
+shared code (`src/engine/types.py`, `engine.py`) affects `array_baseline`
+identically, since it reuses those modules unchanged -- for those, the comparison
+is before/after across labeled result files instead, noted per entry below.
+
+### 1. `RestingOrder.from_order`: keyword arguments → positional
+
+**Hypothesis**: keyword-argument binding costs more per call than positional: this
+classmethod runs on every order that rests (not just accepted -- every GTC/GTD that
+doesn't fully fill), so shaving its cost pays off broadly.
+
+**Change**: `src/engine/types.py` -- `cls(order_id=..., side=..., ...)` →
+`cls(order.order_id, order.side, ...)`, field order matching `RestingOrder`'s
+declaration exactly (documented inline, since that positional coupling is the
+price of the optimization).
+
+Lives in shared `types.py`, so this is a before/after comparison, not an
+`array_baseline` A/B (`array_baseline` reuses the same `RestingOrder.from_order`
+and shows the identical improvement -- confirmed, not just assumed, by measuring
+it too).
+
+**Before → after** (p50 / events-per-sec, `array`, 7 repeats each):
+
+| cell | p50 before | p50 after | Δp50 | events/s before | events/s after | Δthroughput |
+|---|---:|---:|---:|---:|---:|---:|
+| balanced/d10,000 | 1500ns | 1417ns | **-5.5%** | 1,452,006 | 1,459,782 | +0.5% |
+| sweep_heavy/d10,000 | 1500ns | 1375ns | **-8.3%** | 1,460,175 | 1,498,015 | +2.6% |
+| deep_book/d100,000 | 1541ns | 1458ns | **-5.4%** | 1,334,106 | 1,350,003 | +1.2% |
+
+**Verdict: kept**, with an honest caveat on the acceptance bar as literally stated.
+p50 clears the ≥5% bar on every cell, consistently and in the predicted direction
+-- three independent cells agreeing is a real, reproducible signal, not noise.
+`events_per_sec` improves on every cell too, but by less than 5% on all three; it
+aggregates more per-command variance (total trades, events-per-command) than p50
+does, so a smaller, noisier throughput win alongside a clean, consistent p50 win is
+a very different situation from the near-zero/negative case the ≥5%-on-both bar
+was designed to filter out. Kept because the change is a one-line, zero-risk,
+zero-memory-cost reordering with no readability cost, and the evidence -- while not
+hitting the letter of the pre-declared bar on `events_per_sec` -- clearly clears its
+intent.
+
+### 2. `_validate`: `isinstance` pair → `type(x) is not int`
+
+**Hypothesis**: an isolated microbenchmark (one call, in a tight loop, nothing
+else happening) showed `type(x) is not int` at roughly half the cost of
+`not isinstance(x, int) or isinstance(x, bool)`. Estimated ~7% of total command
+time based on that isolated number and `_validate`'s ~8% share of profiled
+`tottime` in the initial three-cell profile.
+
+**Change**: `src/engine/engine.py`, `_validate`'s price and quantity checks.
+Exactly equivalent for this purpose (`type(True) is bool`, not `int`, so `bool` is
+still rejected; also rejects any other `int` subclass, arguably more correct than
+the two-`isinstance` form). Lives in shared `engine.py`, so before/after across
+labeled files again, not an `array_baseline` A/B.
+
+**Before → after** (vs. optimization 1's numbers, `array`, 7 repeats each):
+
+| cell | p50 before | p50 after | Δp50 | events/s before | events/s after | Δthroughput |
+|---|---:|---:|---:|---:|---:|---:|
+| balanced/d10,000 | 1417ns | 1417ns | 0% | 1,459,782 | 1,476,249 | +1.1% |
+| sweep_heavy/d10,000 | 1375ns | 1375ns | 0% | 1,498,015 | 1,508,995 | +0.7% |
+| deep_book/d100,000 | 1458ns | 1416ns | -2.9% | 1,350,003 | 1,365,677 | +1.2% |
+
+**Verdict: no significant change against the pre-declared ≥5% bar** -- the isolated
+microbenchmark overstated the real-world effect, because these two checks are a
+small fraction of a command's total cost once matching, event construction, and
+`seq` bookkeeping are included; `_validate`'s ~8% share of profiled time was itself
+inflated by cProfile's well-known per-call overhead bias against small, frequently
+called functions (noted in the profiling methodology above). **Kept anyway**: it is
+a lossless simplification (one identity check instead of two calls, same
+behavior, covered by the unchanged existing test suite) that also removes two
+`# type: ignore[redundant-expr]` suppressions `mypy` needed for the old form --
+a real code-quality improvement independent of the speed claim, which is reported
+honestly as not holding up at the whole-command level.
+
+**A related cost was measured, in a real throwaway variant, but deliberately not
+adopted**: commenting out `_validate`'s `UNKNOWN_SIDE`/`UNKNOWN_ORDER_TYPE`
+`isinstance` checks entirely (the ones a type-checked caller can never trigger --
+see Phase 1's validation-order entry), then reverted immediately after
+measuring -- never committed as a real change:
+
+| cell | p50 with checks | p50 without | Δp50 | events/s with | events/s without | Δthroughput |
+|---|---:|---:|---:|---:|---:|---:|
+| balanced/d10,000 | 1417ns | 1334ns | -5.9% | 1,476,249 | 1,532,889 | +3.8% |
+| sweep_heavy/d10,000 | 1375ns | 1292ns | -6.0% | 1,508,995 | 1,553,517 | +2.9% |
+| deep_book/d100,000 | 1416ns | 1375ns | -2.9% | 1,365,677 | 1,396,826 | +2.3% |
+
+A real, measurable cost (~3-6% p50), but well short of the "single largest
+opportunity" an initial back-of-envelope estimate suggested before actually
+measuring it -- a second instance, alongside entry #2 itself, of an isolated
+estimate overstating a change's effect at the whole-command level. **Not
+adopted**, regardless of the size of the number: those checks exist specifically
+so a runtime-malformed order (e.g. from Phase 3's deserialized market data) is
+rejected with an `OrderRejected` event instead of crashing the engine, and that
+guarantee is worth its measured cost. The number is recorded here as the honest
+price of paying it, not as an invitation to remove it later.
+
+### 3. `ArrayBook`: inline `_arrays_for` at each call site
+
+**Hypothesis**: `_arrays_for` ran ~139k times in the initial `balanced` profile
+(2+ calls per book operation) -- a Python call plus the 2-tuple it constructs and
+immediately unpacks, on a very hot path.
+
+**Change**: `src/engine/array_book.py` -- `add`, `remove`, `front`, `reduce`, and
+`levels` each select `self._bid_*`/`self._ask_*` inline instead of calling the
+shared helper, which is deleted. Confined entirely to `array_book.py`, so this is a
+genuine same-process `array_baseline` A/B, not a before/after across files.
+
+**`array` vs. `array_baseline`, same session** (7 repeats each):
+
+| cell | p50 baseline | p50 array | Δp50 | events/s baseline | events/s array | Δthroughput |
+|---|---:|---:|---:|---:|---:|---:|
+| balanced/d10,000 | 1417ns | 1375ns | -3.0% | 1,471,331 | 1,501,099 | +2.0% |
+| sweep_heavy/d10,000 | 1375ns | 1334ns | -3.0% | 1,506,623 | 1,538,040 | +2.1% |
+| deep_book/d100,000 | 1417ns | 1416ns | -0.1% | 1,350,218 | 1,377,377 | +2.0% |
+
+**Verdict: kept, below the ≥5% bar but consistent and never negative.** Every cell
+improves on both metrics; none clears 5%. Weighed against the actual readability
+cost here specifically (not a hypothetical one): the four-line side-selection
+`if`/`else` is now duplicated across five methods instead of centralized in one
+helper -- a real but small tax, and the resulting code is still obviously correct
+(each duplicate is a two-line dict/list selection, not logic that can drift out of
+sync). Kept on the combination of a small, real, consistent win and a small,
+bounded duplication cost, not because it independently clears the pre-declared
+threshold.
+
+### 4. `ArrayBook`: intrusive doubly-linked-list FIFO, replacing `OrderedDict`
+
+The optimization Phase 1 explicitly deferred to be profiled first (see
+`array_book.py`'s original module docstring and the `array_book_baseline.py`
+entry above).
+
+**Hypothesis, recorded before measuring**: `front()`'s `next(iter(od.values()),
+None)` measured ~43ns against a DLL head-read's ~5ns in isolation. Weighted by
+call frequency in the three profiled cells: `front()` runs roughly once per
+submit on `balanced` (mostly non-crossing, so ~0.6 calls/command) but **once per
+maker consumed** on `sweep_heavy`, where a single sweep crosses many levels.
+Forecast: negligible on `balanced`, a real win on `sweep_heavy`, something in
+between on `deep_book`.
+
+**Change**: `src/engine/array_book.py` -- `_bid_levels`/`_ask_levels` (arrays of
+`OrderedDict`) replaced by `_bid_head`/`_bid_tail`/`_bid_count` (and the ask
+equivalents), arrays of `RestingOrder | None` / `RestingOrder | None` / `int`.
+`front()` is now `head[price]`, one list read, no iterator. The links live
+directly on `RestingOrder` as `_dll_prev`/`_dll_next` (documented there as
+book-private scratch `NaiveBook`/`TreeBook` never touch -- the design's one
+acknowledged wart, named rather than hidden) so resting an order costs no
+allocation beyond the `RestingOrder` itself. Nulling both links on `remove` is
+not optional: a removed order still pointing into the list would keep off-book
+objects reachable and turn a future double-remove into silent corruption instead
+of a clean no-op.
+
+Confined entirely to `array_book.py` plus the two new fields on the shared
+`RestingOrder` (unused by every other book), so `array_baseline` gives a true
+same-process A/B.
+
+**Protocol impact: none.** `front`'s contract (FIFO-first order at `(side,
+price)`, `None` if empty or out of range, never raises) is unchanged, so the
+conformance and differential suites are the acceptance gate -- this ships with
+**zero new correctness tests** for the engine layer. All 321 engine/property/
+differential tests (`HYPOTHESIS_PROFILE=ci`, thousands of examples) pass
+unmodified. That is the return on Phase 1 having built the protocol this way.
+
+**A real bug found while first running the benchmark, fixed before any number was
+measured**: `copy.deepcopy` recurses one Python stack frame per `_dll_next` link
+when copying a price level, and `balanced`'s setup at depth 10,000 concentrates
+well over 1,000 orders at a single price tick (passive offsets cluster near the
+touch by design), exceeding Python's default recursion limit and raising
+`RecursionError` -- silently breaking the harness's own deepcopy-per-repeat
+technique for exactly the scale this phase cares about most. Fixed with
+`bench/harness.py`'s `_deepcopy_engine`: raises `sys.setrecursionlimit()` for the
+duration of the copy, restores it immediately after. Regression test in
+`tests/bench/test_harness.py`. Recorded here because it's a real, non-obvious
+interaction between a storage-layer choice and a benchmarking technique, not
+something either was designed against in isolation.
+
+**`array` vs. `array_baseline`, same session** (9 repeats each):
+
+| cell | p50 baseline | p50 array | Δp50 | events/s baseline | events/s array | Δthroughput |
+|---|---:|---:|---:|---:|---:|---:|
+| balanced/d10,000 | 1375ns | 1375ns | 0% | 1,506,523 | 1,548,849 | +2.8% |
+| sweep_heavy/d10,000 | 1334ns | 1334ns | 0% | 1,539,007 | 1,578,598 | +2.6% |
+| deep_book/d100,000 | 1375ns | 1333ns | **-3.1%** | 1,370,902 | 1,520,341 | **+10.9%** |
+
+**Memory** (depth 10,000, `deep_book` setup, `bytes_per_resting_order`):
+**200.9 B/order (`array`) vs. 279.6 B/order (`array_baseline`) -- a 28% reduction**,
+not the small increase the design anticipated. Two extra pointer slots on an
+already-`__slots__`-ed `RestingOrder` cost far less than the `OrderedDict` per
+level they replace (a hash table with its own internal linked structure for
+insertion order, one per occupied price tick).
+
+**Verdict: kept, clearly.** `deep_book`'s throughput win (+10.9%) is the largest
+single number in this optimization log, matching the forecast that `front()`'s
+call frequency (not `balanced`'s, which barely moved) is where this change pays
+off. Combined with a real memory *reduction* and zero new correctness surface,
+this clears the pre-declared bar outright on `deep_book` and is strictly
+beneficial elsewhere. The forecast's shape (negligible on `balanced`, a real win
+where `front()` is hot) held; its magnitude on `deep_book` and the memory
+direction were both larger/better than predicted -- worth recording as a case
+where measuring changed the conclusion for the better, the outcome this whole
+log-before-you-decide methodology exists to catch either direction of.

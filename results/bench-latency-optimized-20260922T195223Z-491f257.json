@@ -1,0 +1,731 @@
+{
+  "schema_version": 1,
+  "run_id": "20260922T195223Z-491f257-latency",
+  "label": "optimized",
+  "mode": "latency",
+  "started_at_utc": "20260922T195223Z",
+  "environment": {
+    "python_version": "3.13.2",
+    "python_implementation": "CPython",
+    "os": "Darwin",
+    "os_release": "25.6.0",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "cpu_brand": "Apple M5",
+    "cpu_count_logical": 10,
+    "git_commit": "491f2574ac6b18e908dc56199f7cd045e6797398",
+    "git_dirty": false,
+    "timer": {
+      "name": "perf_counter_ns",
+      "resolution_ns": 41.666666666666664,
+      "overhead_ns_median": 42,
+      "overhead_ns_p99": 83
+    }
+  },
+  "methodology": {
+    "latency_unit": "ns_per_engine_call",
+    "percentile_method": "nearest_rank",
+    "aggregation_across_repeats": "median_of_per_repeat_percentiles",
+    "warmup_events": 5000,
+    "gc_mode": "frozen",
+    "setup_method": "deepcopy_per_repeat"
+  },
+  "results": [
+    {
+      "cell_key": "sparse_book/array/d20/n15000/t100",
+      "status": "ok",
+      "workload": "sparse_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 15000,
+        "depth": 20,
+        "max_tick": 100,
+        "cancel_frac": 0.5,
+        "passive_frac": 0.4
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 5,
+      "repro_command": "python -m bench.run_bench --workload sparse_book --impl array --depth 20 --seed 1 --max-tick 100 --repeats 5 --mode latency",
+      "setup": {
+        "commands": 20
+      },
+      "measured": {
+        "commands": 15000,
+        "commands_completed_median": 15000,
+        "events": 49343,
+        "trades": 12159,
+        "rejects": 0,
+        "cancel_rejects": 11,
+        "engine_seconds_median": 0.032325849
+      },
+      "throughput": {
+        "events_per_sec": 1526425.4931092453,
+        "commands_per_sec": 464024.9355863786,
+        "trades_per_sec": 376138.6127863185
+      },
+      "latency_ns": {
+        "p50": 1667,
+        "p95": 4209,
+        "p99": 5208,
+        "max": 66083,
+        "max_worst_repeat": 75084
+      },
+      "per_repeat": [
+        {
+          "repeat": 0,
+          "commands": 15000,
+          "engine_seconds": 0.029977758,
+          "p50": 1500,
+          "p95": 4000,
+          "p99": 5042,
+          "max": 72291,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 1,
+          "commands": 15000,
+          "engine_seconds": 0.032884013,
+          "p50": 1709,
+          "p95": 4250,
+          "p99": 5375,
+          "max": 56458,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 2,
+          "commands": 15000,
+          "engine_seconds": 0.032325849,
+          "p50": 1667,
+          "p95": 4209,
+          "p99": 5292,
+          "max": 75084,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 3,
+          "commands": 15000,
+          "engine_seconds": 0.032512419,
+          "p50": 1667,
+          "p95": 4375,
+          "p99": 5166,
+          "max": 66083,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 4,
+          "commands": 15000,
+          "engine_seconds": 0.032141681,
+          "p50": 1666,
+          "p95": 4041,
+          "p99": 5208,
+          "max": 36375,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "memory": null,
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "sparse_book/tree/d20/n15000/t100",
+      "status": "ok",
+      "workload": "sparse_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 15000,
+        "depth": 20,
+        "max_tick": 100,
+        "cancel_frac": 0.5,
+        "passive_frac": 0.4
+      },
+      "impl": "tree",
+      "impl_description": "sorted-map (SortedDict) per side, general-exchange comparison",
+      "repeats": 5,
+      "repro_command": "python -m bench.run_bench --workload sparse_book --impl tree --depth 20 --seed 1 --max-tick 100 --repeats 5 --mode latency",
+      "setup": {
+        "commands": 20
+      },
+      "measured": {
+        "commands": 15000,
+        "commands_completed_median": 15000,
+        "events": 49343,
+        "trades": 12159,
+        "rejects": 0,
+        "cancel_rejects": 11,
+        "engine_seconds_median": 0.033017182
+      },
+      "throughput": {
+        "events_per_sec": 1494464.30649351,
+        "commands_per_sec": 454308.91103910684,
+        "trades_per_sec": 368262.8032883
+      },
+      "latency_ns": {
+        "p50": 1625,
+        "p95": 4500,
+        "p99": 5583,
+        "max": 27875,
+        "max_worst_repeat": 78334
+      },
+      "per_repeat": [
+        {
+          "repeat": 0,
+          "commands": 15000,
+          "engine_seconds": 0.033432966,
+          "p50": 1708,
+          "p95": 4500,
+          "p99": 5708,
+          "max": 78334,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 1,
+          "commands": 15000,
+          "engine_seconds": 0.033864935,
+          "p50": 1625,
+          "p95": 4708,
+          "p99": 5625,
+          "max": 27875,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 2,
+          "commands": 15000,
+          "engine_seconds": 0.032933603,
+          "p50": 1625,
+          "p95": 4458,
+          "p99": 5583,
+          "max": 24625,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 3,
+          "commands": 15000,
+          "engine_seconds": 0.033017182,
+          "p50": 1625,
+          "p95": 4583,
+          "p99": 5417,
+          "max": 33250,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 4,
+          "commands": 15000,
+          "engine_seconds": 0.032645212,
+          "p50": 1625,
+          "p95": 4459,
+          "p99": 5583,
+          "max": 27834,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "memory": null,
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "sparse_book/naive/d20/n15000/t100",
+      "status": "ok",
+      "workload": "sparse_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 15000,
+        "depth": 20,
+        "max_tick": 100,
+        "cancel_frac": 0.5,
+        "passive_frac": 0.4
+      },
+      "impl": "naive",
+      "impl_description": "one flat list per side, O(n) reference implementation",
+      "repeats": 5,
+      "repro_command": "python -m bench.run_bench --workload sparse_book --impl naive --depth 20 --seed 1 --max-tick 100 --repeats 5 --mode latency",
+      "setup": {
+        "commands": 20
+      },
+      "measured": {
+        "commands": 15000,
+        "commands_completed_median": 15000,
+        "events": 49343,
+        "trades": 12159,
+        "rejects": 0,
+        "cancel_rejects": 11,
+        "engine_seconds_median": 0.137251197
+      },
+      "throughput": {
+        "events_per_sec": 359508.70432117255,
+        "commands_per_sec": 109288.66434585632,
+        "trades_per_sec": 88589.39131875112
+      },
+      "latency_ns": {
+        "p50": 1791,
+        "p95": 30542,
+        "p99": 43542,
+        "max": 71666,
+        "max_worst_repeat": 74000
+      },
+      "per_repeat": [
+        {
+          "repeat": 0,
+          "commands": 15000,
+          "engine_seconds": 0.133648629,
+          "p50": 1667,
+          "p95": 29375,
+          "p99": 41875,
+          "max": 71666,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 1,
+          "commands": 15000,
+          "engine_seconds": 0.137251197,
+          "p50": 1791,
+          "p95": 30208,
+          "p99": 44042,
+          "max": 70709,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 2,
+          "commands": 15000,
+          "engine_seconds": 0.136302943,
+          "p50": 1791,
+          "p95": 31250,
+          "p99": 42417,
+          "max": 74000,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 3,
+          "commands": 15000,
+          "engine_seconds": 0.138278859,
+          "p50": 1791,
+          "p95": 30542,
+          "p99": 43542,
+          "max": 68167,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 4,
+          "commands": 15000,
+          "engine_seconds": 0.140939459,
+          "p50": 1875,
+          "p95": 30958,
+          "p99": 44875,
+          "max": 73167,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "memory": null,
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "sparse_book/array/d50/n15000/t100",
+      "status": "ok",
+      "workload": "sparse_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 15000,
+        "depth": 50,
+        "max_tick": 100,
+        "cancel_frac": 0.5,
+        "passive_frac": 0.4
+      },
+      "impl": "array",
+      "impl_description": "bounded price array, O(1) add/cancel/best-price",
+      "repeats": 5,
+      "repro_command": "python -m bench.run_bench --workload sparse_book --impl array --depth 50 --seed 1 --max-tick 100 --repeats 5 --mode latency",
+      "setup": {
+        "commands": 50
+      },
+      "measured": {
+        "commands": 15000,
+        "commands_completed_median": 15000,
+        "events": 49342,
+        "trades": 12158,
+        "rejects": 0,
+        "cancel_rejects": 15,
+        "engine_seconds_median": 0.034209944
+      },
+      "throughput": {
+        "events_per_sec": 1442329.1660459894,
+        "commands_per_sec": 438469.00187851815,
+        "trades_per_sec": 355393.7416559349
+      },
+      "latency_ns": {
+        "p50": 1750,
+        "p95": 4542,
+        "p99": 5500,
+        "max": 32291,
+        "max_worst_repeat": 34792
+      },
+      "per_repeat": [
+        {
+          "repeat": 0,
+          "commands": 15000,
+          "engine_seconds": 0.034049769,
+          "p50": 1750,
+          "p95": 4542,
+          "p99": 5416,
+          "max": 30458,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 1,
+          "commands": 15000,
+          "engine_seconds": 0.035506117,
+          "p50": 1833,
+          "p95": 4542,
+          "p99": 5750,
+          "max": 27166,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 2,
+          "commands": 15000,
+          "engine_seconds": 0.034209944,
+          "p50": 1750,
+          "p95": 4375,
+          "p99": 5500,
+          "max": 33417,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 3,
+          "commands": 15000,
+          "engine_seconds": 0.034772585,
+          "p50": 1750,
+          "p95": 4750,
+          "p99": 5500,
+          "max": 34792,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 4,
+          "commands": 15000,
+          "engine_seconds": 0.033290574,
+          "p50": 1709,
+          "p95": 4291,
+          "p99": 5417,
+          "max": 32291,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "memory": null,
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "sparse_book/tree/d50/n15000/t100",
+      "status": "ok",
+      "workload": "sparse_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 15000,
+        "depth": 50,
+        "max_tick": 100,
+        "cancel_frac": 0.5,
+        "passive_frac": 0.4
+      },
+      "impl": "tree",
+      "impl_description": "sorted-map (SortedDict) per side, general-exchange comparison",
+      "repeats": 5,
+      "repro_command": "python -m bench.run_bench --workload sparse_book --impl tree --depth 50 --seed 1 --max-tick 100 --repeats 5 --mode latency",
+      "setup": {
+        "commands": 50
+      },
+      "measured": {
+        "commands": 15000,
+        "commands_completed_median": 15000,
+        "events": 49342,
+        "trades": 12158,
+        "rejects": 0,
+        "cancel_rejects": 15,
+        "engine_seconds_median": 0.03501158
+      },
+      "throughput": {
+        "events_per_sec": 1409305.14989612,
+        "commands_per_sec": 428429.67955173686,
+        "trades_per_sec": 347256.5362660011
+      },
+      "latency_ns": {
+        "p50": 1667,
+        "p95": 4875,
+        "p99": 5833,
+        "max": 32459,
+        "max_worst_repeat": 34250
+      },
+      "per_repeat": [
+        {
+          "repeat": 0,
+          "commands": 15000,
+          "engine_seconds": 0.036163153,
+          "p50": 1791,
+          "p95": 5125,
+          "p99": 5917,
+          "max": 33625,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 1,
+          "commands": 15000,
+          "engine_seconds": 0.03505924,
+          "p50": 1709,
+          "p95": 4875,
+          "p99": 5875,
+          "max": 34250,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 2,
+          "commands": 15000,
+          "engine_seconds": 0.03501158,
+          "p50": 1667,
+          "p95": 4875,
+          "p99": 5833,
+          "max": 32459,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 3,
+          "commands": 15000,
+          "engine_seconds": 0.034948893,
+          "p50": 1666,
+          "p95": 4834,
+          "p99": 5791,
+          "max": 28792,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 4,
+          "commands": 15000,
+          "engine_seconds": 0.033076408,
+          "p50": 1625,
+          "p95": 4750,
+          "p99": 5334,
+          "max": 28917,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "memory": null,
+      "estimated_seconds": null,
+      "error": null
+    },
+    {
+      "cell_key": "sparse_book/naive/d50/n15000/t100",
+      "status": "ok",
+      "workload": "sparse_book",
+      "workload_params": {
+        "seed": 1,
+        "n_events": 15000,
+        "depth": 50,
+        "max_tick": 100,
+        "cancel_frac": 0.5,
+        "passive_frac": 0.4
+      },
+      "impl": "naive",
+      "impl_description": "one flat list per side, O(n) reference implementation",
+      "repeats": 5,
+      "repro_command": "python -m bench.run_bench --workload sparse_book --impl naive --depth 50 --seed 1 --max-tick 100 --repeats 5 --mode latency",
+      "setup": {
+        "commands": 50
+      },
+      "measured": {
+        "commands": 15000,
+        "commands_completed_median": 15000,
+        "events": 49342,
+        "trades": 12158,
+        "rejects": 0,
+        "cancel_rejects": 15,
+        "engine_seconds_median": 0.136993771
+      },
+      "throughput": {
+        "events_per_sec": 360176.9601626632,
+        "commands_per_sec": 109494.0294767125,
+        "trades_per_sec": 88748.56069185803
+      },
+      "latency_ns": {
+        "p50": 1833,
+        "p95": 29833,
+        "p99": 43000,
+        "max": 72792,
+        "max_worst_repeat": 80917
+      },
+      "per_repeat": [
+        {
+          "repeat": 0,
+          "commands": 15000,
+          "engine_seconds": 0.134865677,
+          "p50": 1708,
+          "p95": 29167,
+          "p99": 43000,
+          "max": 75542,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 1,
+          "commands": 15000,
+          "engine_seconds": 0.13493046,
+          "p50": 1833,
+          "p95": 29833,
+          "p99": 42791,
+          "max": 72792,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 2,
+          "commands": 15000,
+          "engine_seconds": 0.137466817,
+          "p50": 1875,
+          "p95": 30625,
+          "p99": 44125,
+          "max": 80917,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 3,
+          "commands": 15000,
+          "engine_seconds": 0.136993771,
+          "p50": 1750,
+          "p95": 29542,
+          "p99": 42917,
+          "max": 70250,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "repeat": 4,
+          "commands": 15000,
+          "engine_seconds": 0.139351056,
+          "p50": 1875,
+          "p95": 29834,
+          "p99": 43500,
+          "max": 72667,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "memory": null,
+      "estimated_seconds": null,
+      "error": null
+    }
+  ]
+}
